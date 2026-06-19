@@ -41,6 +41,7 @@
   let activeResponseTimer = null; // watchResponse 的輪詢
   let introPoll = null; // startIntro 的訊息輪詢
   let reloadTimer = null; // SPA 換頁後延遲重載
+  let rdTextHolder = null; // cleanText 重複使用的離畫面隱藏容器（避免每次建立/移除）
 
   // 只在「對話相關」頁面顯示日記，避免蓋住登入頁、設定頁等
   function onOverlayPath() {
@@ -145,7 +146,8 @@
   // content script 在隔離世界攔不到頁面的 history.pushState，故以輪詢 location.href 偵測。
   let lastUrl = location.href;
   function watchUrlChanges() {
-    setInterval(() => {
+    const id = setInterval(() => {
+      if (!extValid()) { clearInterval(id); return; } // 擴充重載後舊分頁 context 失效 → 停掉輪詢
       if (location.href === lastUrl) return;
       lastUrl = location.href; // 隨時更新；隱藏時切換對話的重載改由「重新啟用」時主動處理
       if (!overlay || overlay.classList.contains("rd-hidden")) return;
@@ -422,15 +424,18 @@
     if (!node) return "";
     const clone = node.cloneNode(true);
     clone.querySelectorAll(SELECTORS.noise).forEach((el) => el.remove());
-    // innerText 在「未掛載節點」會退化為 textContent（丟失段落換行）；暫時掛到隱藏容器再讀。
-    // 用 visibility:hidden（非 display:none，否則 innerText 會是空字串）並移到畫面外。
-    const rdHolder = document.createElement("div");
-    rdHolder.style.cssText =
-      "position:absolute;left:-99999px;top:0;width:640px;visibility:hidden;white-space:pre-wrap;";
-    rdHolder.appendChild(clone);
-    document.documentElement.appendChild(rdHolder);
+    // innerText 在「未掛載節點」會退化為 textContent（丟失段落換行）；掛到隱藏容器再讀。
+    // 重複使用同一個離畫面 visibility:hidden 容器（非 display:none，否則 innerText 會是空字串），
+    // 避免每次建立/移除造成額外重排。
+    if (!rdTextHolder) {
+      rdTextHolder = document.createElement("div");
+      rdTextHolder.style.cssText =
+        "position:absolute;left:-99999px;top:0;width:640px;visibility:hidden;white-space:pre-wrap;";
+      document.documentElement.appendChild(rdTextHolder);
+    }
+    rdTextHolder.replaceChildren(clone);
     let t = (clone.innerText || "").replace(/ /g, " ").trim();
-    rdHolder.remove();
+    rdTextHolder.replaceChildren(); // 清空內容但保留容器供下次重用
     // 去掉開頭可能殘留的無障礙標籤（無障礙複本已由 SELECTORS.noise 的 .sr-only 移除，
     // 不做「整段去重複」——那會誤砍回覆中合法的重複，如「哈哈 哈哈」、詩句、列表）
     t = t.replace(/^(Claude\s+(responded|said)|You\s+said)\s*:?\s*/i, "");
@@ -484,13 +489,17 @@
       return false;
     }
     ed.focus();
-    // 用 execCommand 寫入 contenteditable，可觸發 React 監聽的 input 事件
+    // 用 execCommand 寫入 contenteditable，可觸發 React 監聽的 input 事件。
+    // 注意：execCommand 失敗時不一定丟例外，常是「回傳 false」——兩種都要視為失敗。
+    let inserted = false;
     try {
       document.execCommand("selectAll", false, null);
-      document.execCommand("insertText", false, text);
+      inserted = document.execCommand("insertText", false, text);
     } catch (e) {
-      // execCommand 失敗時，直接設 textContent 會破壞 ProseMirror 內部狀態；
-      // 改派發 beforeinput，讓編輯器透過正常事件流插入文字。
+      inserted = false;
+    }
+    if (!inserted) {
+      // 直接設 textContent 會破壞 ProseMirror 內部狀態；改派發 beforeinput，走正常事件流插入
       ed.dispatchEvent(
         new InputEvent("beforeinput", {
           bubbles: true,
