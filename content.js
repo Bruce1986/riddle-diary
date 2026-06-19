@@ -99,8 +99,18 @@
       if (changes.rd_enabled) {
         state.enabled = changes.rd_enabled.newValue;
         if (state.enabled) {
-          if (!overlay) buildOverlay();
-          else overlay.classList.remove("rd-hidden");
+          if (!overlay) {
+            buildOverlay();
+          } else {
+            overlay.classList.remove("rd-hidden");
+            // 重新啟用時主動同步：清狀態、清空、重載目前對話
+            // （涵蓋「日記隱藏期間切換過對話」的邊界）
+            lastUrl = location.href;
+            resetState();
+            const feed = overlay.querySelector("#rd-feed");
+            if (feed) feed.innerHTML = "";
+            startIntro();
+          }
         } else if (overlay) {
           overlay.classList.add("rd-hidden");
           resetState(); // 停用時清掉背景計時器
@@ -129,9 +139,8 @@
   function watchUrlChanges() {
     setInterval(() => {
       if (location.href === lastUrl) return;
-      // 隱藏時先別更新 lastUrl —— 否則關閉日記時切換對話、重開後會偵測不到變更
+      lastUrl = location.href; // 隨時更新；隱藏時切換對話的重載改由「重新啟用」時主動處理
       if (!overlay || overlay.classList.contains("rd-hidden")) return;
-      lastUrl = location.href;
       // 換對話了 → 統一重置（清計時器/busy/佇列），再重設換頁專屬狀態
       resetState();
       personaSent = false; // 新對話要重新前置人設
@@ -407,7 +416,15 @@
     if (!node) return "";
     const clone = node.cloneNode(true);
     clone.querySelectorAll(SELECTORS.noise).forEach((el) => el.remove());
+    // innerText 在「未掛載節點」會退化為 textContent（丟失段落換行）；暫時掛到隱藏容器再讀。
+    // 用 visibility:hidden（非 display:none，否則 innerText 會是空字串）並移到畫面外。
+    const rdHolder = document.createElement("div");
+    rdHolder.style.cssText =
+      "position:absolute;left:-99999px;top:0;width:640px;visibility:hidden;white-space:pre-wrap;";
+    rdHolder.appendChild(clone);
+    document.documentElement.appendChild(rdHolder);
     let t = (clone.innerText || "").replace(/ /g, " ").trim();
+    rdHolder.remove();
     // 去掉開頭可能殘留的無障礙標籤（無障礙複本已由 SELECTORS.noise 的 .sr-only 移除，
     // 不做「整段去重複」——那會誤砍回覆中合法的重複，如「哈哈 哈哈」、詩句、列表）
     t = t.replace(/^(Claude\s+(responded|said)|You\s+said)\s*:?\s*/i, "");
@@ -466,31 +483,47 @@
       document.execCommand("selectAll", false, null);
       document.execCommand("insertText", false, text);
     } catch (e) {
-      ed.textContent = text;
-      ed.dispatchEvent(new InputEvent("input", { bubbles: true }));
+      // execCommand 失敗時，直接設 textContent 會破壞 ProseMirror 內部狀態；
+      // 改派發 beforeinput，讓編輯器透過正常事件流插入文字。
+      ed.dispatchEvent(
+        new InputEvent("beforeinput", {
+          bubbles: true,
+          cancelable: true,
+          inputType: "insertText",
+          data: text,
+        })
+      );
     }
-    setTimeout(() => {
+    // 寫入後，ProseMirror/React 需要極短時間才會啟用送出鈕。用短輪詢（最多 ~500ms）
+    // 等鈕啟用再點，比寫死延遲更穩；都等不到才退回派發 Enter 鍵盤事件（保底）。
+    let attempts = 0;
+    const trySend = () => {
       const btn = document.querySelector(SELECTORS.sendBtn);
       if (btn && !btn.disabled) {
         btn.click();
-      } else {
-        ["keydown", "keyup"].forEach((type) =>
-          ed.dispatchEvent(
-            new KeyboardEvent(type, {
-              key: "Enter",
-              code: "Enter",
-              keyCode: 13,
-              which: 13,
-              bubbles: true,
-              cancelable: true,
-            })
-          )
-        );
+        return;
       }
-    }, 120);
-    // 回傳 true = 已「嘗試」送出（找得到輸入框）。實際送出在 setTimeout 內非同步進行；
-    // 若送出鈕缺失/停用且 Enter fallback 也沒觸發，watchResponse 會在約 36 秒無回應後
-    // 顯示「沒有回音」並解鎖 —— 這是刻意的優雅降級，無法從外部即時確認 Claude 是否收到。
+      if (attempts++ < 10) {
+        setTimeout(trySend, 50);
+        return;
+      }
+      ["keydown", "keyup"].forEach((type) =>
+        ed.dispatchEvent(
+          new KeyboardEvent(type, {
+            key: "Enter",
+            code: "Enter",
+            keyCode: 13,
+            which: 13,
+            bubbles: true,
+            cancelable: true,
+          })
+        )
+      );
+    };
+    setTimeout(trySend, 50);
+    // 回傳 true = 已「嘗試」送出（找得到輸入框）。實際送出在輪詢中非同步進行；
+    // 若送出鈕始終不啟用且 Enter fallback 也沒觸發，watchResponse 會在約 36 秒無回應後
+    // 顯示「沒有回音」並解鎖 —— 刻意的優雅降級，無法從外部即時確認 Claude 是否收到。
     return true;
   }
 
