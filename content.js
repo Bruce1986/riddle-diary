@@ -31,7 +31,7 @@
   let state = { enabled: true, persona: true };
   let personaSent = false; // 每次載入只在第一則訊息前置人設
   let busy = false;
-  let queued = null; // busy 時按 Enter 的訊息，等本回合結束再送
+  const queued = []; // busy 時按 Enter 的訊息佇列，本回合結束後依序送出
   let overlay = null;
   let fontsInjected = false;
 
@@ -104,6 +104,36 @@
     /* context 失效，略過監聽 */
   }
 
+  // 監看 SPA 換頁：claude.ai 在側邊欄切換對話不會重整頁面，
+  // content script 在隔離世界攔不到頁面的 history.pushState，故以輪詢 location.href 偵測。
+  let lastUrl = location.href;
+  function watchUrlChanges() {
+    setInterval(() => {
+      if (location.href === lastUrl) return;
+      lastUrl = location.href;
+      if (!overlay || overlay.classList.contains("rd-hidden")) return;
+      // 換對話了 → 重置狀態，重新把新對話鋪進日記
+      personaSent = false; // 新對話要重新前置人設
+      busy = false;
+      queued.length = 0;
+      overlay.classList.remove("rd-hist-open");
+      const feed = overlay.querySelector("#rd-feed");
+      if (feed) feed.innerHTML = "";
+      setTimeout(startIntro, 500); // 給 claude.ai 換上新對話內容的時間
+    }, 700);
+  }
+
+  // 讓非 <button> 的可點元素也能用鍵盤（Enter / Space）操作
+  function onActivate(el, fn) {
+    el.addEventListener("click", fn);
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+        e.preventDefault();
+        fn(e);
+      }
+    });
+  }
+
   // ── 介面 ────────────────────────────────────────────────────────
   function buildOverlay() {
     if (overlay) return;
@@ -112,7 +142,7 @@
     overlay.id = "rd-overlay";
     overlay.innerHTML = `
       <div id="rd-book">
-        <div id="rd-bookmark" title="翻開左側的歷史篇章"><span>書籤</span></div>
+        <div id="rd-bookmark" role="button" tabindex="0" aria-label="翻開左側的歷史篇章" title="翻開左側的歷史篇章"><span>書籤</span></div>
 
         <aside id="rd-history">
           <div class="rd-hist-head">
@@ -132,7 +162,7 @@
         <textarea id="rd-pen" rows="1" placeholder="在此落筆…（Enter 送出，Shift+Enter 換行）"></textarea>
         <div id="rd-caption">羽毛筆 · 墨水會自行滲入紙頁，再由日記回應你</div>
 
-        <div id="rd-cover">
+        <div id="rd-cover" role="button" tabindex="0" aria-label="輕觸翻開日記">
           <div class="rd-cover-frame">
             <div class="rd-cover-title">T. M. Riddle</div>
             <div class="rd-cover-rule"></div>
@@ -176,7 +206,7 @@
 
     // 書籤 ↔ 歷史面板
     const bookmark = overlay.querySelector("#rd-bookmark");
-    bookmark.addEventListener("click", () => toggleHistory());
+    onActivate(bookmark, () => toggleHistory());
     overlay.querySelector("#rd-hist-close").addEventListener("click", () => toggleHistory(false));
     overlay.querySelector("#rd-new").addEventListener("click", () => {
       sessionStorage.setItem("rd_skipcover", "1");
@@ -190,8 +220,10 @@
       cover.remove();
       startIntro();
     } else {
-      cover.addEventListener("click", openBook);
+      onActivate(cover, openBook);
     }
+
+    watchUrlChanges(); // 開始監看 SPA 換頁
   }
 
   // ── 啟動書封動畫 ────────────────────────────────────────────────
@@ -329,13 +361,11 @@
     return line;
   }
 
-  // 取得目前所有「助理回覆」節點（依序退而求其次）
+  // 取得目前所有「助理回覆」節點。
+  // 用聯集 querySelectorAll：它以「文件順序」回傳且自動去重，因此 nodes[last]
+  // 必為頁面最後一則助理訊息（含串流中的那則），不會被選擇器先後順序誤導。
   function responseNodes() {
-    for (const sel of SELECTORS.response.split(",")) {
-      const found = document.querySelectorAll(sel.trim());
-      if (found.length) return found;
-    }
-    return [];
+    return document.querySelectorAll(SELECTORS.response);
   }
 
   // 擷取節點的乾淨內文：剔除無障礙標籤、按鈕、思考區塊
@@ -358,14 +388,14 @@
 
   // ── 送出 + 接收 ─────────────────────────────────────────────────
   function submit(raw) {
-    const text = (raw || "").trim();
-    if (!text) return;
     const pen = overlay.querySelector("#rd-pen");
-    pen.value = "";
+    const text = (raw || "").trim();
+    pen.value = ""; // 一律先清空（連只輸入空白/換行的情況也清掉）
     pen.style.height = "auto";
+    if (!text) return;
     if (busy) {
-      // 上一回合還在進行 → 排隊，輸入框照樣清空，結束後自動接著送
-      queued = text;
+      // 上一回合還在進行 → 排隊，結束後依序自動送
+      queued.push(text);
       return;
     }
     busy = true;
@@ -412,6 +442,7 @@
               keyCode: 13,
               which: 13,
               bubbles: true,
+              cancelable: true,
             })
           )
         );
@@ -472,11 +503,7 @@
     if (waiting) waiting.remove();
     const after = () => {
       busy = false;
-      if (queued) {
-        const q = queued;
-        queued = null;
-        submit(q); // 送出排隊中的訊息
-      }
+      if (queued.length) submit(queued.shift()); // 送出佇列中的下一則
     };
     ink(text || "（這次紙頁沒有回音……再試一次？）", "rd-diary", after);
   }

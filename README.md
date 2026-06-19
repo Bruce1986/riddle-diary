@@ -21,7 +21,7 @@ You write on the page, it relays your words to your already‑logged‑in Claude
 This project is built to be **verifiable, not just "trust me."** Both Taiwanese and international users should be able to confirm it is safe.
 
 - **No servers of ours.** The extension talks to nothing we operate. There is **no backend, no analytics, no telemetry, no data collection**.
-- **No network calls in the code.** `content.js` (483 lines) contains **zero** `fetch`, `XMLHttpRequest`, `WebSocket`, or `sendBeacon`. Verify it yourself:
+- **No network calls in the code.** `content.js` (510 lines) contains **zero** `fetch`, `XMLHttpRequest`, `WebSocket`, or `sendBeacon`. Verify it yourself:
   ```bash
   grep -nE "fetch\(|XMLHttpRequest|WebSocket|sendBeacon" content.js   # → nothing
   ```
@@ -48,7 +48,7 @@ That is the complete list. There is no `tabs`, `cookies`, `webRequest`, `<all_ur
 grep -rnE "fetch\(|XMLHttpRequest|WebSocket|sendBeacon" content.js popup.js
 # 2. See exactly which hosts/resources are declared
 cat manifest.json
-# 3. Read the whole thing — it's 483 lines
+# 3. Read the whole thing — it's 510 lines
 less content.js
 ```
 
@@ -78,7 +78,7 @@ When claude.ai changes its markup, you usually only need to update the `SELECTOR
 ### Fonts & licenses
 
 - **Chinese — Chenyuluoyan (辰宇落雁體)**, OFL 1.1, bundled in `fonts/`.
-- **English — Tangerine**, from Google Fonts (license pending confirmation — see `licenses/`), bundled locally in `fonts/`.
+- **English — Tangerine**, SIL OFL 1.1 (Google Fonts), bundled locally in `fonts/`.
 - All license files are kept in [`licenses/`](licenses/). See [`licenses/README.md`](licenses/README.md).
 
 ### License
@@ -94,7 +94,7 @@ Code: **MIT** — see [`LICENSE`](LICENSE). Bundled fonts keep their own OSS lic
 這個專案的設計原則是「**可以自己驗證，而不是叫你相信我**」。台灣使用者與外國使用者都應該能自行確認它是安全的。
 
 - **沒有我們的伺服器。** 擴充不會跟任何我們經營的服務通訊。**沒有後端、沒有分析、沒有遙測、不蒐集任何資料**。
-- **程式碼裡沒有任何對外連線。** `content.js`（483 行）裡 **完全沒有** `fetch`、`XMLHttpRequest`、`WebSocket`、`sendBeacon`。你可以自己驗：
+- **程式碼裡沒有任何對外連線。** `content.js`（510 行）裡 **完全沒有** `fetch`、`XMLHttpRequest`、`WebSocket`、`sendBeacon`。你可以自己驗：
   ```bash
   grep -nE "fetch\(|XMLHttpRequest|WebSocket|sendBeacon" content.js   # → 什麼都沒有
   ```
@@ -121,7 +121,7 @@ Code: **MIT** — see [`LICENSE`](LICENSE). Bundled fonts keep their own OSS lic
 grep -rnE "fetch\(|XMLHttpRequest|WebSocket|sendBeacon" content.js popup.js
 # 2. 看清楚宣告了哪些網域／資源
 cat manifest.json
-# 3. 整份讀過 —— 只有 483 行
+# 3. 整份讀過 —— 只有 510 行
 less content.js
 ```
 
@@ -151,7 +151,7 @@ claude.ai 改版時，通常只要更新 `content.js` 最上方的 `SELECTORS`�
 ### 字型與授權
 
 - **中文 — 辰宇落雁體**，OFL 1.1，打包於 `fonts/`。
-- **英文 — Tangerine**，來自 Google Fonts（授權待確認，見 `licenses/`），打包於 `fonts/`。
+- **英文 — Tangerine**，SIL OFL 1.1（來自 Google Fonts），打包於 `fonts/`。
 - 所有授權檔保存在 [`licenses/`](licenses/)，說明見 [`licenses/README.md`](licenses/README.md)。
 
 ### 授權

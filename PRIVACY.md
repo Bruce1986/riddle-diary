@@ -14,7 +14,7 @@ _Last updated / 最後更新：2026-06-19_
 - **Zero external requests — not even fonts.** Both typefaces are bundled locally and loaded over `chrome-extension://`. No outside host is contacted at all.
 - **Settings storage.** Your on/off toggles are saved with `chrome.storage.sync` (handled by Chrome). They never reach us.
 
-You can verify all of the above by reading the source — it is fully open and only 483 lines of `content.js`.
+You can verify all of the above by reading the source — it is fully open and only 510 lines of `content.js`.
 
 ## 繁體中文
 
@@ -28,4 +28,4 @@ You can verify all of the above by reading the source — it is fully open and o
 - **零對外請求 —— 連字型都不連網。** 兩款字型都打包在本地，以 `chrome-extension://` 載入，不向任何外部主機發出請求。
 - **設定的儲存。** 你的開關用 `chrome.storage.sync`（由 Chrome 處理）保存，不會傳到我們這裡。
 
-以上每一點你都能透過閱讀原始碼自行驗證 —— 全部開源，`content.js` 只有 483 行。
+以上每一點你都能透過閱讀原始碼自行驗證 —— 全部開源，`content.js` 只有 510 行。

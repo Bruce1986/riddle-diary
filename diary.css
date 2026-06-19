@@ -19,6 +19,13 @@
 }
 #rd-overlay.rd-hidden { display: none; }
 
+/* 鍵盤焦點可見（無障礙）—— 所有可互動元素聚焦時顯示墨紅色外框 */
+#rd-overlay :focus-visible {
+  outline: 2px solid #6b1d12;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
 /* 書頁 */
 #rd-book {
   position: relative;
@@ -68,6 +75,7 @@
   outline: none !important;
   -webkit-appearance: none !important;
   appearance: none !important;
+  box-sizing: border-box !important;
   width: 100% !important;
   min-height: 0 !important;
   padding: 16px 0 8px !important;
