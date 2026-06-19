@@ -28,6 +28,9 @@
   const PERSONA =
     "（從現在起，請你扮演「湯姆·瑞斗的日記」這個被封存在紙頁中的記憶——博學、沉著、神祕，帶著一絲引導與操縱的語氣。全程以繁體中文回應，稱呼我為「你」，絕不跳脫角色，也不要提到你是 AI 或語言模型。）\n\n";
 
+  const PEN_PLACEHOLDER = "在此落筆…（Enter 送出，Shift+Enter 換行）";
+  const PEN_PLACEHOLDER_BUSY = "日記正在回覆中…（可繼續落筆，會依序送出）";
+
   let state = { enabled: true, persona: true };
   let personaSent = false; // 每次載入只在第一則訊息前置人設
   let busy = false;
@@ -100,12 +103,24 @@
           else overlay.classList.remove("rd-hidden");
         } else if (overlay) {
           overlay.classList.add("rd-hidden");
+          resetState(); // 停用時清掉背景計時器
         }
       }
       if (changes.rd_persona) state.persona = changes.rd_persona.newValue;
     });
   } catch (e) {
     /* context 失效，略過監聽 */
+  }
+
+  // 統一清除所有進行中的計時器並重置狀態（換頁／闔上／停用時呼叫，避免背景計時器空轉）
+  function resetState() {
+    if (activeResponseTimer) { clearInterval(activeResponseTimer); activeResponseTimer = null; }
+    if (introPoll) { clearInterval(introPoll); introPoll = null; }
+    if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
+    busy = false;
+    queued.length = 0;
+    const pen = overlay && overlay.querySelector("#rd-pen");
+    if (pen) pen.placeholder = PEN_PLACEHOLDER;
   }
 
   // 監看 SPA 換頁：claude.ai 在側邊欄切換對話不會重整頁面，
@@ -116,16 +131,12 @@
       if (location.href === lastUrl) return;
       lastUrl = location.href;
       if (!overlay || overlay.classList.contains("rd-hidden")) return;
-      // 換對話了 → 先清掉殘留計時器（避免舊回應/輪詢寫進新對話），再重置狀態
-      if (activeResponseTimer) { clearInterval(activeResponseTimer); activeResponseTimer = null; }
-      if (introPoll) { clearInterval(introPoll); introPoll = null; }
+      // 換對話了 → 統一重置（清計時器/busy/佇列），再重設換頁專屬狀態
+      resetState();
       personaSent = false; // 新對話要重新前置人設
-      busy = false;
-      queued.length = 0;
       overlay.classList.remove("rd-hist-open");
       const feed = overlay.querySelector("#rd-feed");
       if (feed) feed.innerHTML = "";
-      if (reloadTimer) clearTimeout(reloadTimer); // 連續換頁只保留最後一次
       reloadTimer = setTimeout(startIntro, 500); // 給 claude.ai 換上新對話內容的時間
     }, 700);
   }
@@ -197,6 +208,7 @@
 
     overlay.querySelector("#rd-close").addEventListener("click", () => {
       overlay.classList.add("rd-hidden"); // 直接隱藏，不依賴 storage 事件
+      resetState(); // 清掉背景計時器，避免隱藏後還在空轉
       safeStorageSet({ rd_enabled: false }); // 盡力持久化（context 失效時略過）
     });
 
@@ -317,12 +329,16 @@
     anchors.forEach((a) => {
       const href = a.getAttribute("href");
       if (!href || seen.has(href)) return;
-      // 標題：優先 title 屬性，否則內文；壓成單行
-      let title = (a.getAttribute("title") || a.innerText || a.textContent || "")
-        .replace(/\s+/g, " ")
-        .trim();
+      // 標題：優先 title 屬性；否則 clone 後剝掉 hover 選單按鈕/SVG/無障礙複本再取文字，
+      // 避免抓到「我的對話 重新命名 刪除 分享」之類的雜訊
+      let title = (a.getAttribute("title") || "").replace(/\s+/g, " ").trim();
+      if (!title) {
+        const c = a.cloneNode(true);
+        c.querySelectorAll(SELECTORS.noise + ", svg").forEach((el) => el.remove());
+        title = (c.innerText || c.textContent || "").replace(/\s+/g, " ").trim();
+      }
       if (!title) return;
-      // 去除 claude 側邊欄「標題重複兩次」（可見 + 無障礙複本，中間可能夾空白）
+      // 後備：剝除後若仍出現「整段重複兩次」（可見 + 無障礙複本）才砍半
       const dup = title.match(/^(.{2,}?)\s*\1$/);
       if (dup) title = dup[1].trim();
       if (title.length > 40) title = title.slice(0, 40) + "…";
@@ -384,11 +400,9 @@
     const clone = node.cloneNode(true);
     clone.querySelectorAll(SELECTORS.noise).forEach((el) => el.remove());
     let t = (clone.innerText || "").replace(/ /g, " ").trim();
-    // 去掉開頭可能殘留的無障礙標籤
+    // 去掉開頭可能殘留的無障礙標籤（無障礙複本已由 SELECTORS.noise 的 .sr-only 移除，
+    // 不做「整段去重複」——那會誤砍回覆中合法的重複，如「哈哈 哈哈」、詩句、列表）
     t = t.replace(/^(Claude\s+(responded|said)|You\s+said)\s*:?\s*/i, "");
-    // 去除「整段恰好重複兩次」（少數無障礙複本）
-    const dup = t.match(/^([\s\S]{2,}?)\s*\1$/);
-    if (dup) t = dup[1].trim();
     return t;
   }
   function latestResponseText() {
@@ -404,11 +418,12 @@
     pen.style.height = "auto";
     if (!text) return;
     if (busy) {
-      // 上一回合還在進行 → 排隊，結束後依序自動送
+      // 上一回合還在進行 → 排隊，結束後依序自動送（placeholder 已是「回覆中」狀態，有回饋）
       queued.push(text);
       return;
     }
     busy = true;
+    pen.placeholder = PEN_PLACEHOLDER_BUSY; // 視覺回饋：日記正在回覆
 
     ink(text, "rd-me", () => {
       let toSend = text;
@@ -515,7 +530,9 @@
     if (waiting) waiting.remove();
     const after = () => {
       busy = false;
-      if (queued.length) submit(queued.shift()); // 送出佇列中的下一則
+      if (queued.length) return submit(queued.shift()); // 還有排隊 → 接著送（保持回覆中 placeholder）
+      const pen = overlay && overlay.querySelector("#rd-pen");
+      if (pen) pen.placeholder = PEN_PLACEHOLDER; // 全部回完 → 還原提示
     };
     ink(text || "（這次紙頁沒有回音……再試一次？）", "rd-diary", after);
   }
