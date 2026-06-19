@@ -42,6 +42,14 @@
   let introPoll = null; // startIntro 的訊息輪詢
   let reloadTimer = null; // SPA 換頁後延遲重載
 
+  // 只在「對話相關」頁面顯示日記，避免蓋住登入頁、設定頁等
+  function onOverlayPath() {
+    return (
+      location.pathname === "/" ||
+      /^\/(chat\/|project\/|new|recents)/.test(location.pathname)
+    );
+  }
+
   // 兩個字型都打包在擴充內，以 chrome-extension:// URL 注入 @font-face，完全不對外連線，
   // 也繞過 claude.ai 的 CSP（其 font-src 白名單不含外部 CDN）。
   function injectFonts() {
@@ -91,7 +99,7 @@
   safeStorageGet({ rd_enabled: true, rd_persona: true }, (cfg) => {
     state.enabled = cfg.rd_enabled;
     state.persona = cfg.rd_persona;
-    if (state.enabled) buildOverlay();
+    if (state.enabled && onOverlayPath()) buildOverlay();
   });
 
   try {
@@ -100,7 +108,7 @@
         state.enabled = changes.rd_enabled.newValue;
         if (state.enabled) {
           if (!overlay) {
-            buildOverlay();
+            if (onOverlayPath()) buildOverlay();
           } else {
             overlay.classList.remove("rd-hidden");
             // 重新啟用時主動同步：清狀態、清空、重載目前對話
@@ -282,10 +290,10 @@
           introPoll = null;
           renderExisting(nodes);
           if (pen) pen.focus();
-        } else if (tries > 16) {
+        } else if (tries > 24) {
           clearInterval(introPoll);
           introPoll = null;
-          showIntroLine(pen); // 約 5 秒仍無訊息 → 當作空白頁
+          showIntroLine(pen); // 約 7 秒仍無訊息 → 當作空白頁（放寬以容忍慢網路）
         }
       }, 300);
     } else {
@@ -299,26 +307,22 @@
     );
   }
 
-  // 把既有對話的訊息「立即」鋪進日記（不逐字動畫）
+  // 把既有對話的訊息「立即」鋪進日記（不逐字動畫）。用 DocumentFragment 一次掛上，避免逐行重排。
   function renderExisting(nodes) {
     const feed = overlay.querySelector("#rd-feed");
     feed.innerHTML = "";
+    const frag = document.createDocumentFragment();
     nodes.forEach((node) => {
       const isUser = node.matches(SELECTORS.userMsg);
       const text = cleanText(node);
-      if (text) inkStatic(text, isUser ? "rd-me" : "rd-diary");
+      if (!text) return;
+      const line = document.createElement("div");
+      line.className = "rd-line " + (isUser ? "rd-me" : "rd-diary");
+      line.textContent = text;
+      frag.appendChild(line);
     });
-  }
-
-  // 立即顯示一行（既有對話用，無浮現動畫）
-  function inkStatic(text, cls) {
-    const feed = overlay.querySelector("#rd-feed");
-    const line = document.createElement("div");
-    line.className = "rd-line " + cls;
-    line.textContent = text;
-    feed.appendChild(line);
+    feed.appendChild(frag);
     feed.scrollTop = feed.scrollHeight;
-    return line;
   }
 
   // ── 歷史篇章（書籤翻頁） ────────────────────────────────────────
@@ -361,9 +365,10 @@
         toggleHistory(false); // 收起面板
         // 優先 SPA 軟導航：點擊側邊欄原本的連結，避免整頁重載；
         // watchUrlChanges 會偵測到 URL 改變並把新對話重新鋪進日記。
-        if (typeof a.click === "function") {
+        if (a.isConnected && typeof a.click === "function") {
           a.click();
         } else {
+          // 連結已從 DOM 移除 → 退回 hard reload
           sessionStorage.setItem("rd_skipcover", "1");
           window.location.href = href;
         }
@@ -392,6 +397,7 @@
     const step = cls === "rd-me" ? 26 : 65;
     let i = 0;
     (function reveal() {
+      if (!line.isConnected) return; // 節點已被移除（如換頁清空 feed）→ 停止，避免孤兒計時器
       if (i < spans.length) {
         spans[i].style.opacity = 1;
         i++;
