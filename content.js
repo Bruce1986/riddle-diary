@@ -129,8 +129,9 @@
   function watchUrlChanges() {
     setInterval(() => {
       if (location.href === lastUrl) return;
-      lastUrl = location.href;
+      // 隱藏時先別更新 lastUrl —— 否則關閉日記時切換對話、重開後會偵測不到變更
       if (!overlay || overlay.classList.contains("rd-hidden")) return;
+      lastUrl = location.href;
       // 換對話了 → 統一重置（清計時器/busy/佇列），再重設換頁專屬狀態
       resetState();
       personaSent = false; // 新對話要重新前置人設
@@ -348,8 +349,15 @@
       item.textContent = title;
       item.title = title;
       item.addEventListener("click", () => {
-        sessionStorage.setItem("rd_skipcover", "1");
-        window.location.href = href;
+        toggleHistory(false); // 收起面板
+        // 優先 SPA 軟導航：點擊側邊欄原本的連結，避免整頁重載；
+        // watchUrlChanges 會偵測到 URL 改變並把新對話重新鋪進日記。
+        if (typeof a.click === "function") {
+          a.click();
+        } else {
+          sessionStorage.setItem("rd_skipcover", "1");
+          window.location.href = href;
+        }
       });
       list.appendChild(item);
       count++;
@@ -417,24 +425,31 @@
     pen.value = ""; // 一律先清空（連只輸入空白/換行的情況也清掉）
     pen.style.height = "auto";
     if (!text) return;
+    ink(text, "rd-me"); // 立即顯示使用者這句（不論是否 busy，排隊的也先浮現）
     if (busy) {
-      // 上一回合還在進行 → 排隊，結束後依序自動送（placeholder 已是「回覆中」狀態，有回饋）
-      queued.push(text);
+      queued.push(text); // 正在回覆 → 排入「發送」佇列（畫面已先顯示）
       return;
     }
-    busy = true;
-    pen.placeholder = PEN_PLACEHOLDER_BUSY; // 視覺回饋：日記正在回覆
+    startTurn(text);
+  }
 
-    ink(text, "rd-me", () => {
-      let toSend = text;
-      if (state.persona && !personaSent) {
-        toSend = PERSONA + text;
-        personaSent = true;
-      }
-      const baseline = responseNodes().length;
-      const prev = latestResponseText();
-      if (sendToClaude(toSend)) watchResponse(baseline, prev);
-    });
+  // 真正送出一則訊息並監看回覆（畫面上的 rd-me 已由 submit 先顯示）
+  function startTurn(text) {
+    busy = true;
+    const pen = overlay.querySelector("#rd-pen");
+    if (pen) pen.placeholder = PEN_PLACEHOLDER_BUSY; // 視覺回饋：日記正在回覆
+    let toSend = text;
+    if (state.persona && !personaSent) {
+      toSend = PERSONA + text;
+      personaSent = true;
+    }
+    const baseline = responseNodes().length;
+    const prev = latestResponseText();
+    if (sendToClaude(toSend)) {
+      watchResponse(baseline, prev);
+    } else if (pen) {
+      pen.placeholder = PEN_PLACEHOLDER; // 送出失敗：還原提示，別卡在「回覆中」
+    }
   }
 
   function sendToClaude(text) {
@@ -530,7 +545,7 @@
     if (waiting) waiting.remove();
     const after = () => {
       busy = false;
-      if (queued.length) return submit(queued.shift()); // 還有排隊 → 接著送（保持回覆中 placeholder）
+      if (queued.length) return startTurn(queued.shift()); // 還有排隊 → 送下一則（已先顯示過）
       const pen = overlay && overlay.querySelector("#rd-pen");
       if (pen) pen.placeholder = PEN_PLACEHOLDER; // 全部回完 → 還原提示
     };
