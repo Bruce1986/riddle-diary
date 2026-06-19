@@ -121,7 +121,7 @@ Code: **MIT** — see [`LICENSE`](LICENSE). Bundled fonts keep their own OSS lic
 grep -rnE "fetch\(|XMLHttpRequest|WebSocket|sendBeacon" content.js popup.js
 # 2. 看清楚宣告了哪些網域／資源
 cat manifest.json
-# 3. 整份讀過 —— 只有 約 520 行
+# 3. 整份讀過 —— 只有約 520 行
 less content.js
 ```
 
