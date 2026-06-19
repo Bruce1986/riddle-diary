@@ -34,6 +34,10 @@
   const queued = []; // busy 時按 Enter 的訊息佇列，本回合結束後依序送出
   let overlay = null;
   let fontsInjected = false;
+  // 進行中的計時器（換頁時需清除，避免舊對話的回應/輪詢寫進新對話）
+  let activeResponseTimer = null; // watchResponse 的輪詢
+  let introPoll = null; // startIntro 的訊息輪詢
+  let reloadTimer = null; // SPA 換頁後延遲重載
 
   // 兩個字型都打包在擴充內，以 chrome-extension:// URL 注入 @font-face，完全不對外連線，
   // 也繞過 claude.ai 的 CSP（其 font-src 白名單不含外部 CDN）。
@@ -112,14 +116,17 @@
       if (location.href === lastUrl) return;
       lastUrl = location.href;
       if (!overlay || overlay.classList.contains("rd-hidden")) return;
-      // 換對話了 → 重置狀態，重新把新對話鋪進日記
+      // 換對話了 → 先清掉殘留計時器（避免舊回應/輪詢寫進新對話），再重置狀態
+      if (activeResponseTimer) { clearInterval(activeResponseTimer); activeResponseTimer = null; }
+      if (introPoll) { clearInterval(introPoll); introPoll = null; }
       personaSent = false; // 新對話要重新前置人設
       busy = false;
       queued.length = 0;
       overlay.classList.remove("rd-hist-open");
       const feed = overlay.querySelector("#rd-feed");
       if (feed) feed.innerHTML = "";
-      setTimeout(startIntro, 500); // 給 claude.ai 換上新對話內容的時間
+      if (reloadTimer) clearTimeout(reloadTimer); // 連續換頁只保留最後一次
+      reloadTimer = setTimeout(startIntro, 500); // 給 claude.ai 換上新對話內容的時間
     }, 700);
   }
 
@@ -239,20 +246,23 @@
 
   function startIntro() {
     const pen = overlay.querySelector("#rd-pen");
+    if (introPoll) { clearInterval(introPoll); introPoll = null; } // 避免並行輪詢
     // 在既有對話頁 → 等訊息載入後，把整段對話鋪進日記；否則顯示開場白
     if (/^\/chat\//.test(location.pathname)) {
       let tries = 0;
-      const poll = setInterval(() => {
+      introPoll = setInterval(() => {
         tries++;
         const nodes = document.querySelectorAll(
           SELECTORS.userMsg + "," + SELECTORS.response
         );
         if (nodes.length) {
-          clearInterval(poll);
+          clearInterval(introPoll);
+          introPoll = null;
           renderExisting(nodes);
           if (pen) pen.focus();
         } else if (tries > 16) {
-          clearInterval(poll);
+          clearInterval(introPoll);
+          introPoll = null;
           showIntroLine(pen); // 約 5 秒仍無訊息 → 當作空白頁
         }
       }, 300);
@@ -496,10 +506,12 @@
       if (done) return finish(timer, waiting, lastText);
       if (ticks > 400) return finish(timer, waiting, lastText); // 上限約 2 分鐘
     }, 300);
+    activeResponseTimer = timer; // 記住目前的輪詢，換頁時可清除
   }
 
   function finish(timer, waiting, text) {
     clearInterval(timer);
+    if (timer === activeResponseTimer) activeResponseTimer = null;
     if (waiting) waiting.remove();
     const after = () => {
       busy = false;
