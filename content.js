@@ -3,30 +3,19 @@
 (function () {
   "use strict";
 
-  // ── 可維護的選擇器 ──────────────────────────────────────────────
-  // claude.ai 改版時，多半只要更新這裡即可。用逗號分隔多個候選。
-  const SELECTORS = {
-    editor: 'div.ProseMirror[contenteditable="true"], div[contenteditable="true"]',
-    sendBtn:
-      'button[aria-label="Send message"], button[aria-label="Send Message"], button[data-testid="send-button"], fieldset button[type="submit"]',
-    stopBtn:
-      'button[aria-label="Stop response"], button[aria-label="Stop Response"], button[data-testid="stop-button"]',
-    // 真正的回覆內文容器（依序嘗試）
-    response:
-      'div.font-claude-message, [data-testid="assistant-message"], div[data-is-streaming]',
-    // 使用者訊息（載入既有對話用）。實測 claude.ai 用 [data-testid="user-message"]
-    userMsg: '[data-testid="user-message"], div.font-user-message',
-    // 擷取內文時要剔除的雜訊：無障礙標籤、按鈕、思考/推理區塊
-    noise:
-      '.sr-only, [class*="sr-only"], button, details, [data-testid*="thinking" i], [class*="thinking" i], [aria-label*="thinking" i]',
-    // 側邊欄的歷史對話連結（每筆對話 = 一個 /chat/<id> 連結）
-    historyItem:
-      'nav a[href^="/chat/"], aside a[href^="/chat/"], [data-testid*="nav" i] a[href^="/chat/"]',
-    historyItemFallback: 'a[href^="/chat/"]', // 側邊欄抓不到時，退而求其次全頁搜尋
-  };
+  // ── 平台設定（由 platforms/registry.js + platforms/claude.js 在本腳本前載入） ──
+  // manifest content_scripts.js 載入順序：registry.js → claude.js → content.js
+  const PLATFORM =
+    globalThis.RiddleDiary && globalThis.RiddleDiary.selectPlatform
+      ? globalThis.RiddleDiary.selectPlatform(location.hostname)
+      : null;
+  if (!PLATFORM) return; // 非已知平台 → 不啟用覆蓋層
 
-  const PERSONA =
-    "（從現在起，請你扮演「湯姆·瑞斗的日記」這個被封存在紙頁中的記憶——博學、沉著、神祕，帶著一絲引導與操縱的語氣。全程以繁體中文回應，稱呼我為「你」，絕不跳脫角色，也不要提到你是 AI 或語言模型。）\n\n";
+  // ── 可維護的選擇器 ──────────────────────────────────────────────
+  // claude.ai 改版時，多半只要更新 platforms/claude.js 的 selectors 即可。
+  const SELECTORS = PLATFORM.selectors;
+
+  const PERSONA = PLATFORM.persona;
 
   const PEN_PLACEHOLDER = "在此落筆…（Enter 送出，Shift+Enter 換行）";
   const PEN_PLACEHOLDER_BUSY = "日記正在回覆中…（可繼續落筆，會依序送出）";
@@ -45,10 +34,7 @@
 
   // 只在「對話相關」頁面顯示日記，避免蓋住登入頁、設定頁等
   function onOverlayPath() {
-    return (
-      location.pathname === "/" ||
-      /^\/(chat\/|project\/|new|recents)/.test(location.pathname)
-    );
+    return PLATFORM.isOverlayPath(location.pathname);
   }
 
   // 兩個字型都打包在擴充內，以 chrome-extension:// URL 注入 @font-face，完全不對外連線，
@@ -280,7 +266,7 @@
     const pen = overlay.querySelector("#rd-pen");
     if (introPoll) { clearInterval(introPoll); introPoll = null; } // 避免並行輪詢
     // 在既有對話頁 → 等訊息載入後，把整段對話鋪進日記；否則顯示開場白
-    if (/^\/chat\//.test(location.pathname)) {
+    if (PLATFORM.isExistingConversationPath(location.pathname)) {
       let tries = 0;
       introPoll = setInterval(() => {
         if (!extValid()) { clearInterval(introPoll); introPoll = null; return; } // 孤立腳本自我銷毀
