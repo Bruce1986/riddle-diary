@@ -1,4 +1,4 @@
-// platforms/claude.js — claude.ai 平台設定
+// platforms/claude.cjs — claude.ai 平台設定
 // 使用 UMD 包裝：瀏覽器由 manifest 依序載入（掛到 globalThis.RiddleDiary），
 // Node.js 以 require() 載入（module.exports）。不使用裸 ES export，
 // 因為 content.js 是由 manifest 以傳統 script 載入，無法用 ES module。

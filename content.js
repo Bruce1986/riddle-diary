@@ -3,8 +3,8 @@
 (function () {
   "use strict";
 
-  // ── 平台設定（由 platforms/registry.js + platforms/claude.js 在本腳本前載入） ──
-  // manifest content_scripts.js 載入順序：registry.js → claude.js → content.js
+  // ── 平台設定（由 platforms/registry.cjs + platforms/claude.cjs 在本腳本前載入） ──
+  // manifest content_scripts.js 載入順序：registry.cjs → claude.cjs → content.js
   const PLATFORM =
     globalThis.RiddleDiary && globalThis.RiddleDiary.selectPlatform
       ? globalThis.RiddleDiary.selectPlatform(location.hostname)
