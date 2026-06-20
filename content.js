@@ -283,6 +283,7 @@
     if (/^\/chat\//.test(location.pathname)) {
       let tries = 0;
       introPoll = setInterval(() => {
+        if (!extValid()) { clearInterval(introPoll); introPoll = null; return; } // 孤立腳本自我銷毀
         tries++;
         const nodes = document.querySelectorAll(
           SELECTORS.userMsg + "," + SELECTORS.response
@@ -367,10 +368,14 @@
         toggleHistory(false); // 收起面板
         // 優先 SPA 軟導航：點擊側邊欄原本的連結，避免整頁重載；
         // watchUrlChanges 會偵測到 URL 改變並把新對話重新鋪進日記。
-        if (a.isConnected && typeof a.click === "function") {
-          a.click();
+        // 點擊當下「重新」從 DOM 找最新的同 href 錨點（側邊欄可能已重渲染，舊 a 參照會失效）
+        const live =
+          document.querySelector('a[href="' + href + '"]') ||
+          (a.isConnected ? a : null);
+        if (live) {
+          live.click(); // SPA 軟導航
         } else {
-          // 連結已從 DOM 移除 → 退回 hard reload
+          // 找不到可用錨點 → 退回 hard reload
           sessionStorage.setItem("rd_skipcover", "1");
           window.location.href = href;
         }
@@ -427,11 +432,16 @@
     // innerText 在「未掛載節點」會退化為 textContent（丟失段落換行）；掛到隱藏容器再讀。
     // 重複使用同一個離畫面 visibility:hidden 容器（非 display:none，否則 innerText 會是空字串），
     // 避免每次建立/移除造成額外重排。
-    if (!rdTextHolder) {
-      rdTextHolder = document.createElement("div");
-      rdTextHolder.style.cssText =
-        "position:absolute;left:-99999px;top:0;width:640px;visibility:hidden;white-space:pre-wrap;";
-      document.documentElement.appendChild(rdTextHolder);
+    if (!rdTextHolder || !rdTextHolder.isConnected) {
+      // 用固定 id 復用，避免擴充重載後新舊腳本各建一個、殘留 DOM 節點
+      rdTextHolder = document.getElementById("rd-text-holder");
+      if (!rdTextHolder) {
+        rdTextHolder = document.createElement("div");
+        rdTextHolder.id = "rd-text-holder";
+        rdTextHolder.style.cssText =
+          "position:absolute;left:-99999px;top:0;width:640px;visibility:hidden;white-space:pre-wrap;";
+        document.documentElement.appendChild(rdTextHolder);
+      }
     }
     rdTextHolder.replaceChildren(clone);
     let t = (clone.innerText || "").replace(/ /g, " ").trim();
@@ -453,19 +463,24 @@
     pen.value = ""; // 一律先清空（連只輸入空白/換行的情況也清掉）
     pen.style.height = "auto";
     if (!text) return;
-    ink(text, "rd-me"); // 立即顯示使用者這句（不論是否 busy，排隊的也先浮現）
+    // 編輯器不存在時，不進入 busy（否則佇列會卡死）；直接提示後結束。
+    if (!document.querySelector(SELECTORS.editor)) {
+      ink("（紙頁無法與底下的墨池相連…請確認頁面已開啟一個對話）", "rd-diary");
+      return;
+    }
     if (busy) {
-      queued.push(text); // 正在回覆 → 排入「發送」佇列（畫面已先顯示）
+      queued.push(text); // 正在回覆 → 排入佇列（輪到時才繪製，避免與動畫重疊；placeholder 已提示）
       return;
     }
     startTurn(text);
   }
 
-  // 真正送出一則訊息並監看回覆（畫面上的 rd-me 已由 submit 先顯示）
+  // 真正送出一則訊息並監看回覆
   function startTurn(text) {
     busy = true;
     const pen = overlay.querySelector("#rd-pen");
     if (pen) pen.placeholder = PEN_PLACEHOLDER_BUSY; // 視覺回饋：日記正在回覆
+    ink(text, "rd-me"); // 在此才繪製使用者這句：排隊的訊息等輪到才浮現，不會疊在動畫上
     let toSend = text;
     if (state.persona && !personaSent) {
       toSend = PERSONA + text;
@@ -553,6 +568,11 @@
     const waiting = ink("墨水正在紙頁上凝聚……", "rd-diary"); // 等待時的提示墨痕
 
     const timer = setInterval(() => {
+      if (!extValid()) { // 孤立腳本（擴充重載後）自我銷毀，別在背景空轉改 DOM
+        clearInterval(timer);
+        if (timer === activeResponseTimer) activeResponseTimer = null;
+        return;
+      }
       ticks++;
       const streaming = !!document.querySelector(SELECTORS.stopBtn);
       if (streaming) sawStreaming = true;
