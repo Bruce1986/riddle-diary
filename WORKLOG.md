@@ -3,7 +3,7 @@
 ## 2026-06-20 — T0：解耦平台設定 + 立起 CI
 
 ### 做了什麼
-把 `content.js` 裡寫死的 claude.ai 平台相關常數（SELECTORS、PERSONA、onOverlayPath 邏輯、isExistingConversationPath 邏輯）抽成 `platforms/claude.cjs`，並建立 `platforms/registry.cjs` 依 hostname 選取平台設定。同步建立 `package.json`、`eslint.config.js`（ESLint v9 flat config）、`tests/platforms.test.cjs`（node:test 27 個測試全過）。
+把 `content.js` 裡寫死的 claude.ai 平台相關常數（SELECTORS、PERSONA、onOverlayPath 邏輯、isExistingConversationPath 邏輯）抽成 `platforms/claude.cjs`，並建立 `platforms/registry.cjs` 依 hostname 選取平台設定。同步建立 `package.json`、`eslint.config.js`（ESLint v9 flat config）、`tests/platforms.test.cjs`（node:test 30 個測試全過）。
 
 ### 關鍵決策：為何用 UMD 而非裸 ES export
 

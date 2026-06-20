@@ -73,7 +73,7 @@ less content.js
 2. On send, it writes your text into Claude's real input box (`ProseMirror`) and clicks send.
 3. It polls for the latest assistant message, cleans it (drops accessibility labels / buttons / thinking blocks), and renders the reply as ink once Claude finishes.
 
-When claude.ai changes its markup, you usually only need to update the `SELECTORS` object at the top of `content.js`.
+When claude.ai changes its markup, you usually only need to update the `SELECTORS` object in `platforms/claude.cjs`.
 
 ### Fonts & licenses
 
@@ -146,7 +146,7 @@ less content.js
 2. 送出時，把文字寫進 Claude 真正的輸入框（`ProseMirror`）並按送出。
 3. 輪詢最新一則助理訊息、清掉雜訊（無障礙標籤／按鈕／思考區塊），等 Claude 寫完後把回覆以墨水浮現。
 
-claude.ai 改版時，通常只要更新 `content.js` 最上方的 `SELECTORS`。
+claude.ai 改版時，通常只要更新 `platforms/claude.cjs` 裡的 `SELECTORS`。
 
 ### 字型與授權
 
