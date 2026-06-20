@@ -12,7 +12,7 @@
   if (!PLATFORM) return; // 非已知平台 → 不啟用覆蓋層
 
   // ── 可維護的選擇器 ──────────────────────────────────────────────
-  // claude.ai 改版時，多半只要更新 platforms/claude.js 的 selectors 即可。
+  // claude.ai 改版時，多半只要更新 platforms/claude.cjs 的 selectors 即可。
   const SELECTORS = PLATFORM.selectors;
 
   const PERSONA = PLATFORM.persona;

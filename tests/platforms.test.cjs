@@ -10,9 +10,9 @@ const claudePlatform = require("../platforms/claude.cjs");
 // 再 require registry.cjs：此時 globalThis.RiddleDiary.platforms.claude 已存在
 const { selectPlatform } = require("../platforms/registry.cjs");
 
-// ─── 1. platforms/claude.js schema 完整性 ─────────────────────────────────
+// ─── 1. platforms/claude.cjs schema 完整性 ─────────────────────────────────
 
-describe("platforms/claude.js schema", () => {
+describe("platforms/claude.cjs schema", () => {
   it("module.exports 回傳物件", () => {
     assert.strictEqual(typeof claudePlatform, "object");
     assert.ok(claudePlatform !== null);
