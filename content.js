@@ -311,6 +311,7 @@
 
   // ── 啟動書封動畫 ────────────────────────────────────────────────
   function openBook() {
+    if (openBookTimer) return; // 動畫進行中：忽略連點，避免重複計時器與重複 startIntro
     const cover = overlay.querySelector("#rd-cover");
     if (!cover) return startIntro();
     cover.classList.add("rd-open");
@@ -386,6 +387,7 @@
   // 用獨立的 trackStreamingTimer（不與 watchResponse 共用 activeResponseTimer），避免兩者互相覆蓋／誤清；
   // 換頁/闔上時 resetState() 同樣會一併清掉。
   function trackIfStreaming() {
+    if (trackStreamingTimer) { clearInterval(trackStreamingTimer); trackStreamingTimer = null; } // 重入保護：先清舊計時器再起新的
     if (!document.querySelector(SELECTORS.stopBtn)) return; // 沒在串流就不用追
     let stable = 0;
     let last = "";
