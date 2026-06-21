@@ -41,6 +41,7 @@
   let activeResponseTimer = null; // watchResponse 的輪詢
   let introPoll = null; // startIntro 的訊息輪詢
   let reloadTimer = null; // SPA 換頁後延遲重載
+  let openBookTimer = null; // 書封翻開動畫後移除書封的延遲計時器
   let rdTextHolder = null; // cleanText 重複使用的離畫面容器（已移除 visibility:hidden，避免 innerText 變空）
 
   // 只在「對話相關」頁面顯示日記，避免蓋住登入頁、設定頁等
@@ -110,10 +111,10 @@
         if (state.enabled) {
           if (!overlay) {
             if (onOverlayPath()) buildOverlay();
-          } else {
+          } else if (onOverlayPath()) {
             overlay.classList.remove("rd-hidden");
             // 重新啟用時主動同步：清狀態、清空、重載目前對話
-            // （涵蓋「日記隱藏期間切換過對話」的邊界）
+            // （涵蓋「日記隱藏期間切換過對話」的邊界；非對話頁則維持隱藏不蓋頁面）
             lastUrl = location.href;
             resetState();
             const feed = overlay.querySelector("#rd-feed");
@@ -136,6 +137,7 @@
     if (activeResponseTimer) { clearInterval(activeResponseTimer); activeResponseTimer = null; }
     if (introPoll) { clearInterval(introPoll); introPoll = null; }
     if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
+    if (openBookTimer) { clearTimeout(openBookTimer); openBookTimer = null; }
     busy = false;
     queued.length = 0;
     const pen = overlay && overlay.querySelector("#rd-pen");
@@ -150,7 +152,21 @@
       if (!extValid()) { clearInterval(id); return; } // 擴充重載後舊分頁 context 失效 → 停掉輪詢
       if (location.href === lastUrl) return;
       lastUrl = location.href; // 隨時更新；隱藏時切換對話的重載改由「重新啟用」時主動處理
-      if (!overlay || overlay.classList.contains("rd-hidden")) return;
+      if (!overlay) return;
+      // 導航到非對話頁（/settings、/login…）→ 隱藏日記，別蓋住頁面
+      if (!onOverlayPath()) {
+        if (!overlay.classList.contains("rd-hidden")) {
+          overlay.classList.add("rd-hidden");
+          resetState(); // 清掉背景計時器，避免隱藏後仍空轉
+        }
+        return;
+      }
+      // 已隱藏：若是使用者主動停用（state.enabled=false）則保持隱藏，重載交由「重新啟用」處理；
+      // 若只是先前離開對話頁而被自動隱藏（仍 enabled），回到對話頁就重新顯示。
+      if (overlay.classList.contains("rd-hidden")) {
+        if (!state.enabled) return;
+        overlay.classList.remove("rd-hidden");
+      }
       // 換對話了 → 統一重置（清計時器/busy/佇列），再重設換頁專屬狀態
       resetState();
       personaSent = false; // 新對話要重新前置人設
@@ -175,6 +191,10 @@
   // ── 介面 ────────────────────────────────────────────────────────
   function buildOverlay() {
     if (overlay) return;
+    // 擴充重載後舊腳本 context 失效，但其 #rd-overlay 仍殘留在頁面；
+    // 新腳本的 overlay 變數為 null，若不先清掉舊節點會重複疊一層、事件重複綁定。
+    const stale = document.getElementById("rd-overlay");
+    if (stale) stale.remove();
     injectFonts();
     overlay = document.createElement("div");
     overlay.id = "rd-overlay";
@@ -232,11 +252,18 @@
       safeStorageSet({ rd_enabled: false }); // 盡力持久化（context 失效時略過）
     });
 
-    // 「窺視」：按住可看底層 Claude，放開即恢復。
-    // 放開事件必須掛在 window —— overlay 被設成 visibility:hidden 後，按鈕本身收不到 pointerup。
+    // 「窺視」：按住可看底層 Claude，放開即恢復。用 opacity:0 + pointer-events:none 隱藏，
+    // 不用 visibility:hidden——它會讓聚焦中的按鈕 blur，鍵盤按住時立刻觸發下方 blur 還原而閃爍。
+    // pointer-events:none 後按鈕本身收不到 pointerup，放開事件改掛在 window。
     const peek = overlay.querySelector("#rd-peek");
-    const peekShow = () => (overlay.style.visibility = "hidden");
-    const peekRestore = () => (overlay.style.visibility = "visible");
+    const peekShow = () => {
+      overlay.style.opacity = "0";
+      overlay.style.pointerEvents = "none";
+    };
+    const peekRestore = () => {
+      overlay.style.opacity = "";
+      overlay.style.pointerEvents = "";
+    };
     peek.addEventListener("pointerdown", (e) => {
       e.preventDefault();
       peekShow();
@@ -282,7 +309,8 @@
     const cover = overlay.querySelector("#rd-cover");
     if (!cover) return startIntro();
     cover.classList.add("rd-open");
-    setTimeout(() => {
+    openBookTimer = setTimeout(() => {
+      openBookTimer = null;
       cover.remove();
       startIntro();
     }, 900);
