@@ -45,6 +45,11 @@
   let reloadTimer = null; // SPA 換頁後延遲重載
   let openBookTimer = null; // 書封翻開動畫後移除書封的延遲計時器
   let rdTextHolder = null; // cleanText 重複使用的離畫面容器（已移除 visibility:hidden，避免 innerText 變空）
+  // cleanText 快取：串流期間每 300ms 會重複以相同內容呼叫，命中快取可省去 clone+掛載+innerText
+  // 的同步重排（reflow）。鍵為節點識別 + textContent（快速、不觸發重排的屬性）。
+  let lastCleanedNode = null;
+  let lastCleanedTextContent = "";
+  let lastCleanedResult = "";
 
   // 只在「對話相關」頁面顯示日記，避免蓋住登入頁、設定頁等
   function onOverlayPath() {
@@ -150,6 +155,10 @@
     queued.length = 0;
     const pen = overlay && overlay.querySelector("#rd-pen");
     if (pen) pen.placeholder = PEN_PLACEHOLDER;
+    // 清掉 cleanText 快取，避免持有已從 DOM 移除（detached）的節點參照造成記憶體洩漏
+    lastCleanedNode = null;
+    lastCleanedTextContent = "";
+    lastCleanedResult = "";
   }
 
   // 監看 SPA 換頁：claude.ai 在側邊欄切換對話不會重整頁面，
@@ -159,6 +168,7 @@
     const id = setInterval(() => {
       if (!extValid()) { clearInterval(id); return; } // 擴充重載後舊分頁 context 失效 → 停掉輪詢
       if (location.href === lastUrl) return;
+      const oldUrl = lastUrl;
       lastUrl = location.href; // 隨時更新；隱藏時切換對話的重載改由「重新啟用」時主動處理
       if (!overlay) return;
       // 導航到非對話頁（/settings、/login…）→ 隱藏日記，別蓋住頁面
@@ -174,6 +184,14 @@
       if (overlay.classList.contains("rd-hidden")) {
         if (!state.enabled) return;
         overlay.classList.remove("rd-hidden");
+      }
+      // 送出第一則訊息後，Claude 會把新對話從 / 或 /new 重導到 /chat/<id>。
+      // 若此時正忙（busy：第一則訊息的動畫/輪詢進行中），不要重置與清空畫面，
+      // 否則第一則訊息的墨水書寫動畫會被硬生生打斷、閃成靜態文字。
+      let wasNonChat = true;
+      try { wasNonChat = !/^\/chat\//.test(new URL(oldUrl).pathname); } catch (e) { /* oldUrl 異常時保守視為非對話頁 */ }
+      if (wasNonChat && /^\/chat\//.test(location.pathname) && busy) {
+        return; // 維持同一回合：動畫與 watchResponse 繼續，lastUrl 已更新故不會重觸
       }
       // 換對話了 → 統一重置（清計時器/busy/佇列），再重設換頁專屬狀態
       resetState();
@@ -332,6 +350,7 @@
     // 在既有對話頁 → 等訊息載入後，把整段對話鋪進日記；否則顯示開場白
     if (/^\/chat\//.test(location.pathname)) {
       let tries = 0;
+      const MAX_TRIES = 50; // 約 15 秒（300ms × 50）：/chat/ 必有歷史訊息，放寬以容忍慢速網路
       introPoll = setInterval(() => {
         if (!extValid()) { clearInterval(introPoll); introPoll = null; return; } // 孤立腳本自我銷毀
         tries++;
@@ -341,7 +360,7 @@
         // SPA 換對話時，claude.ai 的 DOM 可能還殘留上一段對話的訊息；
         // 指紋與上次渲染相同代表 DOM 尚未換新，繼續等（逾時才放行，避免極端情況卡死）。
         const fingerprint = fingerprintNodes(nodes);
-        if (nodes.length && fingerprint === lastRenderedFingerprint && tries < 24) {
+        if (nodes.length && fingerprint === lastRenderedFingerprint && tries < MAX_TRIES) {
           return;
         }
         if (nodes.length) {
@@ -350,10 +369,12 @@
           renderExisting(nodes);
           if (pen) pen.focus();
           trackIfStreaming(); // 若載入時對話仍在串流，追蹤到完成後重新整段渲染
-        } else if (tries > 24) {
+        } else if (tries > MAX_TRIES) {
           clearInterval(introPoll);
           introPoll = null;
-          showIntroLine(pen); // 約 7 秒仍無訊息 → 當作空白頁（放寬以容忍慢網路）
+          // /chat/ 必有歷史訊息，逾時仍空 = 載入失敗，顯示錯誤而非「空白新日記」開場白
+          // （後者會誤導，且歷史訊息真的載入後也無法再鋪進來）
+          ink("（記憶似乎有些模糊，無法載入此篇章…請嘗試重新整理頁面）", "rd-diary");
         }
       }, 300);
     } else {
@@ -549,6 +570,11 @@
   // 擷取節點的乾淨內文：剔除無障礙標籤、按鈕、思考區塊
   function cleanText(node) {
     if (!node) return "";
+    // 快取命中（同一節點且 textContent 未變）→ 直接回傳，省去下方 clone+掛載+innerText 的同步重排。
+    // textContent 是不觸發重排的快速屬性，串流期間重複呼叫可大幅降低 reflow 次數。
+    if (node === lastCleanedNode && node.textContent === lastCleanedTextContent) {
+      return lastCleanedResult;
+    }
     const clone = node.cloneNode(true);
     clone.querySelectorAll(SELECTORS.noise).forEach((el) => el.remove());
     // innerText 在「未掛載節點」會退化為 textContent（丟失段落換行）；掛到離畫面容器再讀。
@@ -572,6 +598,9 @@
     // 去掉開頭可能殘留的無障礙標籤（無障礙複本已由 SELECTORS.noise 的 .sr-only 移除，
     // 不做「整段去重複」——那會誤砍回覆中合法的重複，如「哈哈 哈哈」、詩句、列表）
     t = t.replace(/^(Claude\s+(responded|said)|You\s+said)\s*:?\s*/i, "");
+    lastCleanedNode = node;
+    lastCleanedTextContent = node.textContent;
+    lastCleanedResult = t;
     return t;
   }
   function latestResponseText() {
@@ -720,7 +749,9 @@
       // 只有在沒有新節點、且內容仍等於送出前舊回覆時，才視為「還沒開始回」。
       const grew = responseNodes().length > baseline;
       if (!cur || (cur === prev && !grew)) {
-        if (ticks > 220) return finish(timer, waiting, null);
+        // 思考/推理模型（如 3.7 Sonnet）思考期間 thinking 區塊被 noise 過濾 → cur 為空，
+        // 但 stopBtn 仍在（streaming=true）。只有在「非串流」時才判逾時，避免長思考被誤判無回應。
+        if (ticks > 220 && !streaming) return finish(timer, waiting, null);
         return;
       }
       if (cur !== lastText) {
@@ -733,7 +764,8 @@
       // 串流停止後、內文穩定數拍即收筆；沒抓到串流則靠穩定判斷
       const done = !streaming && (sawStreaming ? stableTicks >= 3 : stableTicks >= 8);
       if (done) return finish(timer, waiting, lastText);
-      if (ticks > 400) return finish(timer, waiting, lastText); // 上限約 2 分鐘
+      // 絕對保底上限同樣只在非串流時觸發，否則長文本生成（streaming=true）會被中途截斷
+      if (ticks > 400 && !streaming) return finish(timer, waiting, lastText);
     }, 300);
     activeResponseTimer = timer; // 記住目前的輪詢，換頁時可清除
   }
