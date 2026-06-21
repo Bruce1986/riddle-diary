@@ -1,89 +1,94 @@
 // tests/platforms.test.cjs — node:test 單元測試（CommonJS，搭配 UMD 的 require 載入）
 "use strict";
 
-const { describe, it, before, after } = require("node:test");
+const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const path = require("node:path");
 
 // 先 require claude.cjs：UMD 會同時掛到 globalThis.RiddleDiary.platforms.claude
 const claudePlatform = require("../platforms/claude.cjs");
 // 再 require registry.cjs：此時 globalThis.RiddleDiary.platforms.claude 已存在
 const { selectPlatform } = require("../platforms/registry.cjs");
 
-// ─── 1. platforms/claude.cjs schema 完整性 ─────────────────────────────────
+// ─── 1. 平台 schema 完整性（動態走訪所有已註冊平台）─────────────────────────
+// 不針對單一平台硬編碼：走訪 globalThis.RiddleDiary.platforms，對每個平台跑同一套
+// schema 驗證。日後新增 ChatGPT/Gemini 等平台檔，CI 會自動納入、不必複製測試。
 
-describe("platforms/claude.cjs schema", () => {
-  it("module.exports 回傳物件", () => {
-    assert.strictEqual(typeof claudePlatform, "object");
-    assert.ok(claudePlatform !== null);
+describe("平台 schema 完整性（動態走訪所有已註冊平台）", () => {
+  const platforms = (globalThis.RiddleDiary && globalThis.RiddleDiary.platforms) || {};
+  const ids = Object.keys(platforms);
+
+  it("至少註冊一個平台", () => {
+    assert.ok(ids.length > 0, "globalThis.RiddleDiary.platforms 不應為空");
   });
 
-  it("id 是字串 'claude'", () => {
-    assert.strictEqual(typeof claudePlatform.id, "string");
-    assert.strictEqual(claudePlatform.id, "claude");
-  });
+  for (const id of ids) {
+    const platform = platforms[id];
+    describe(`平台 '${id}'`, () => {
+      it("是非 null 物件", () => {
+        assert.strictEqual(typeof platform, "object");
+        assert.ok(platform !== null);
+      });
 
-  it("siteName 是字串", () => {
-    assert.strictEqual(typeof claudePlatform.siteName, "string");
-    assert.ok(claudePlatform.siteName.length > 0);
-  });
+      it("id 是字串且等於註冊鍵", () => {
+        assert.strictEqual(typeof platform.id, "string");
+        assert.strictEqual(platform.id, id);
+      });
 
-  it("domains 是非空字串陣列且含 claude.ai", () => {
-    assert.ok(Array.isArray(claudePlatform.domains));
-    assert.ok(claudePlatform.domains.length > 0);
-    assert.strictEqual(typeof claudePlatform.domains[0], "string");
-    assert.ok(claudePlatform.domains.includes("claude.ai"));
-  });
+      it("siteName 是非空字串", () => {
+        assert.strictEqual(typeof platform.siteName, "string");
+        assert.ok(platform.siteName.length > 0);
+      });
 
-  it("persona 是非空字串", () => {
-    assert.strictEqual(typeof claudePlatform.persona, "string");
-    assert.ok(claudePlatform.persona.length > 0);
-  });
+      it("domains 是非空字串陣列", () => {
+        assert.ok(Array.isArray(platform.domains));
+        assert.ok(platform.domains.length > 0);
+        for (const d of platform.domains) {
+          assert.strictEqual(typeof d, "string");
+          assert.ok(d.length > 0);
+        }
+      });
 
-  it("selectors 存在且各鍵正確", () => {
-    const s = claudePlatform.selectors;
-    assert.strictEqual(typeof s, "object");
-    assert.ok(s !== null);
-    const requiredKeys = [
-      "editor",
-      "sendBtn",
-      "stopBtn",
-      "response",
-      "userMsg",
-      "noise",
-      "historyItem",
-      "historyItemFallback",
-    ];
-    for (const key of requiredKeys) {
-      assert.strictEqual(
-        typeof s[key],
-        "string",
-        `selectors.${key} 應為字串`
-      );
-      assert.ok(s[key].length > 0, `selectors.${key} 不應為空字串`);
-    }
-  });
+      it("persona 是非空字串", () => {
+        assert.strictEqual(typeof platform.persona, "string");
+        assert.ok(platform.persona.length > 0);
+      });
 
-  it("isOverlayPath 是函式", () => {
-    assert.strictEqual(typeof claudePlatform.isOverlayPath, "function");
-  });
+      it("selectors 各必要鍵為非空字串", () => {
+        const s = platform.selectors;
+        assert.strictEqual(typeof s, "object");
+        assert.ok(s !== null);
+        const requiredKeys = [
+          "editor",
+          "sendBtn",
+          "stopBtn",
+          "response",
+          "userMsg",
+          "noise",
+          "historyItem",
+          "historyItemFallback",
+        ];
+        for (const key of requiredKeys) {
+          assert.strictEqual(typeof s[key], "string", `selectors.${key} 應為字串`);
+          assert.ok(s[key].length > 0, `selectors.${key} 不應為空字串`);
+        }
+      });
 
-  it("isExistingConversationPath 是函式", () => {
-    assert.strictEqual(
-      typeof claudePlatform.isExistingConversationPath,
-      "function"
-    );
-  });
+      it("isOverlayPath / isExistingConversationPath 是函式", () => {
+        assert.strictEqual(typeof platform.isOverlayPath, "function");
+        assert.strictEqual(typeof platform.isExistingConversationPath, "function");
+      });
 
-  it("writeStrategy 是字串", () => {
-    assert.strictEqual(typeof claudePlatform.writeStrategy, "string");
-  });
+      it("writeStrategy 是字串", () => {
+        assert.strictEqual(typeof platform.writeStrategy, "string");
+      });
 
-  it("features 是物件且 history 為布林", () => {
-    assert.strictEqual(typeof claudePlatform.features, "object");
-    assert.ok(claudePlatform.features !== null);
-    assert.strictEqual(typeof claudePlatform.features.history, "boolean");
-  });
+      it("features 是物件且 history 為布林", () => {
+        assert.strictEqual(typeof platform.features, "object");
+        assert.ok(platform.features !== null);
+        assert.strictEqual(typeof platform.features.history, "boolean");
+      });
+    });
+  }
 });
 
 // ─── 2. registry.selectPlatform ──────────────────────────────────────────
@@ -187,69 +192,6 @@ describe("isExistingConversationPath", () => {
   });
 });
 
-// ─── 5. manifest 載入順序（browser-like）────────────────────────────────
-// manifest 實際順序：registry.cjs → claude.cjs → content.js
-// 此測試在乾淨的 require.cache 下依此順序重新載入，
-// 驗證 globalThis.RiddleDiary.selectPlatform("claude.ai") 能正確解析。
-// 若先載 claude.cjs 再載 registry.cjs（錯誤順序），registry 對 platforms 的讀取
-// 並不依賴順序（registry 是 lazy 讀取），但此測試確認 manifest 正確順序下
-// 全域 API 的完整性：platforms.claude 存在、selectPlatform 存在、且回傳正確物件。
-
-describe("manifest 載入順序（browser-like: registry.cjs → claude.cjs）", () => {
-  const registryPath = path.resolve(__dirname, "../platforms/registry.cjs");
-  const claudePath = path.resolve(__dirname, "../platforms/claude.cjs");
-
-  let savedRiddleDiary;
-
-  before(() => {
-    // 備份目前 globalThis.RiddleDiary，測試後還原
-    savedRiddleDiary = globalThis.RiddleDiary;
-    // 清掉全域，確保這是乾淨的 browser-like 環境
-    globalThis.RiddleDiary = undefined;
-    // 清掉 require.cache 讓 UMD 重新執行並重新掛到 globalThis
-    delete require.cache[registryPath];
-    delete require.cache[claudePath];
-  });
-
-  it("依 manifest 順序載入後 globalThis.RiddleDiary.platforms.claude 存在", () => {
-    // Step 1：先載 registry.cjs（此時 platforms 尚未有 claude）
-    require(registryPath);
-    // 驗證此時 platforms.claude 還不存在（確保測試有意義、不是恆真）
-    const afterRegistry = globalThis.RiddleDiary;
-    assert.ok(afterRegistry, "registry 載入後 RiddleDiary 應存在");
-    assert.strictEqual(
-      afterRegistry.platforms && afterRegistry.platforms.claude,
-      undefined,
-      "registry 載入後 platforms.claude 不應存在（claude.cjs 尚未載入）"
-    );
-
-    // Step 2：再載 claude.cjs（此時 platforms.claude 才掛上）
-    require(claudePath);
-    const afterClaude = globalThis.RiddleDiary;
-    assert.ok(
-      afterClaude.platforms && afterClaude.platforms.claude,
-      "claude.cjs 載入後 platforms.claude 應存在"
-    );
-  });
-
-  it("依 manifest 順序載入後 selectPlatform('claude.ai') 回傳 id === 'claude'", () => {
-    // registry 與 claude 已在 before/前一個 it 中依序載入
-    const api = globalThis.RiddleDiary;
-    assert.ok(api, "globalThis.RiddleDiary 應存在");
-    assert.strictEqual(typeof api.selectPlatform, "function", "selectPlatform 應為函式");
-    const result = api.selectPlatform("claude.ai");
-    assert.ok(result !== null, "selectPlatform('claude.ai') 不應回傳 null");
-    assert.strictEqual(result.id, "claude", "回傳物件的 id 應為 'claude'");
-  });
-
-  // 收尾：還原 globalThis.RiddleDiary 並清掉 cache，避免污染其他測試。
-  // 用 node:test 原生 after() hook，即使前面 it 失敗也保證清理，語意也更精確。
-  after(() => {
-    delete require.cache[registryPath];
-    delete require.cache[claudePath];
-    globalThis.RiddleDiary = savedRiddleDiary;
-    // 重新 require 讓後續其他 describe 用的參照仍然有效
-    require(registryPath);
-    require(claudePath);
-  });
-});
+// 註：「manifest 載入順序」測試已移到 tests/manifest-load.test.cjs。
+// node --test 各測試檔在獨立 process 執行，那裡有天然乾淨的環境，
+// 不需在此檔做 require.cache 備份/還原的脆弱操作。
