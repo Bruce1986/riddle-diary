@@ -450,7 +450,7 @@
         // watchUrlChanges 會偵測到 URL 改變並把新對話重新鋪進日記。
         // 點擊當下「重新」從 DOM 找最新的同 href 錨點（側邊欄可能已重渲染，舊 a 參照會失效）
         const live =
-          document.querySelector('a[href="' + href + '"]') ||
+          document.querySelector('a[href="' + CSS.escape(href) + '"]') ||
           (a.isConnected ? a : null);
         if (live) {
           live.click(); // SPA 軟導航
@@ -494,8 +494,11 @@
         }
         feed.scrollTop = feed.scrollHeight;
         setTimeout(reveal, step);
-      } else if (done) {
-        setTimeout(done, 400);
+      } else {
+        // 動畫結束後把上百個帶 transition 的 span 合併回純文字，釋放 DOM／記憶體，
+        // 避免長對話累積數千個節點造成捲動與後續渲染卡頓（已淡入完成，視覺不變）。
+        setTimeout(() => { if (line.isConnected) line.textContent = text; }, 500);
+        if (done) setTimeout(done, 400);
       }
     })();
     return line;
@@ -617,15 +620,11 @@
       inserted = false;
     }
     if (!inserted) {
-      // 直接設 textContent 會破壞 ProseMirror 內部狀態；改派發 beforeinput，走正常事件流插入
-      ed.dispatchEvent(
-        new InputEvent("beforeinput", {
-          bubbles: true,
-          cancelable: true,
-          inputType: "insertText",
-          data: text,
-        })
-      );
+      // execCommand 失敗時不再派發合成 beforeinput：claude.ai 的 ProseMirror 靠 DOM 變動觀察器
+      // 取得輸入，而合成事件不會觸發瀏覽器的預設插入，文字其實寫不進去，只會拖到 watchResponse
+      // 約 36 秒逾時才解鎖。直接提示並回傳 false，由 startTurn 立即重置 busy／佇列，避免介面卡住。
+      ink("（紙頁無法把墨水寫入底下的輸入框…請重新整理頁面或手動輸入）", "rd-diary");
+      return false;
     }
     // 寫入後，ProseMirror/React 需要極短時間才會啟用送出鈕。用短輪詢（最多 ~500ms）
     // 等鈕啟用再點，比寫死延遲更穩；都等不到才退回派發 Enter 鍵盤事件（保底）。
