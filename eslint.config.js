@@ -62,7 +62,7 @@ export default [
           ignoreRestSiblings: true,
         },
       ],
-      // 第 433 行的 / /g 裡有刻意的 U+00A0 NBSP（把 NBSP 替換成一般空格），是業務邏輯，不得改
+      // content.js 的 cleanText 函式裡 / /g 含有刻意的 U+00A0 NBSP（把 NBSP 替換成一般空格），是業務邏輯，不得改
       "no-irregular-whitespace": "off",
     },
   },

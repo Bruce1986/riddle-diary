@@ -19,7 +19,7 @@ UMD 包裝（`if (typeof module !== "undefined" && module.exports) module.export
 
 ### 放寬的 ESLint 規則（均有理由，不影響行為）
 1. `no-unused-vars: { caughtErrors: "none" }`：content.js 有大量 `catch (e)` 靜默忽略例外（擴充 context 失效時的降級策略），這是刻意設計，不應報錯。
-2. `no-irregular-whitespace: "off"`：content.js 第 433 行 `replace(/ /g, " ")` 的 regex 裡含 U+00A0 NBSP，這是業務邏輯（把不換行空格換成一般空格），不能改動。
+2. `no-irregular-whitespace: "off"`：content.js 的 `cleanText` 函式裡 `replace(/ /g, " ")` 的 regex 含 U+00A0 NBSP，這是業務邏輯（把不換行空格換成一般空格），不能改動。
 
 ### 2026-06-21 — Gemini PR #2 review 回應
 - 測試清理改用 node:test 原生 `after()` hook（取代假的清理 `it`，前面測試失敗也保證清理）。

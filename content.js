@@ -25,7 +25,7 @@
   // claude.ai 改版時，多半只要更新 platforms/claude.cjs 的 selectors 即可。
   const SELECTORS = PLATFORM.selectors;
 
-  const PERSONA = PLATFORM.persona;
+  const PERSONA = PLATFORM.persona || ""; // 平台未設 persona 時退回空字串，避免 PERSONA + text 拼出 "undefined"
 
   const PEN_PLACEHOLDER = "在此落筆…（Enter 送出，Shift+Enter 換行）";
   const PEN_PLACEHOLDER_BUSY = "日記正在回覆中…（可繼續落筆，會依序送出）";
