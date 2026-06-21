@@ -10,7 +10,16 @@
     typeof globalThis.RiddleDiary.selectPlatform === "function"
       ? globalThis.RiddleDiary.selectPlatform(location.hostname)
       : null;
-  if (!PLATFORM) return; // 非已知平台 → 不啟用覆蓋層
+  // 非已知平台、或平台設定不完整（缺必要選擇器/路徑判斷）→ 不啟用覆蓋層，
+  // 避免後續存取缺漏屬性而丟 TypeError 讓 content script 崩潰。
+  if (
+    !PLATFORM ||
+    !PLATFORM.selectors ||
+    typeof PLATFORM.isOverlayPath !== "function" ||
+    typeof PLATFORM.isExistingConversationPath !== "function"
+  ) {
+    return;
+  }
 
   // ── 可維護的選擇器 ──────────────────────────────────────────────
   // claude.ai 改版時，多半只要更新 platforms/claude.cjs 的 selectors 即可。

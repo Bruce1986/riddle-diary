@@ -8,6 +8,8 @@
   function selectPlatform(hostname) {
     // 防禦：非字串（null/undefined 等）直接視為無對應，避免 hostname.endsWith 丟 TypeError
     if (typeof hostname !== "string") return null;
+    // 網域大小寫不敏感：統一轉小寫再比對（hostname 與各 domain 皆正規化）
+    const normalizedHostname = hostname.toLowerCase();
     const api = root.RiddleDiary || {};
     const platforms = api.platforms || {};
     // 動態走訪已註冊平台，比對各自宣告的 domains（不在此硬編碼任何網域，
@@ -18,8 +20,14 @@
       if (!Array.isArray(domains)) continue;
       for (const d of domains) {
         if (typeof d !== "string") continue;
-        // 完全相等或子網域（用 "." + d 結尾比對，避免 evilclaude.ai 之類誤判）
-        if (hostname === d || hostname.endsWith("." + d)) return p;
+        const normalizedDomain = d.toLowerCase();
+        // 完全相等或子網域（用 "." + domain 結尾比對，避免 evilclaude.ai 之類誤判）
+        if (
+          normalizedHostname === normalizedDomain ||
+          normalizedHostname.endsWith("." + normalizedDomain)
+        ) {
+          return p;
+        }
       }
     }
     return null;

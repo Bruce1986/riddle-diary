@@ -106,6 +106,12 @@ describe("registry.selectPlatform", () => {
     assert.strictEqual(result.id, "claude");
   });
 
+  it("大寫 'CLAUDE.AI' → 不分大小寫回傳 claude 設定物件", () => {
+    const result = selectPlatform("CLAUDE.AI");
+    assert.ok(result !== null);
+    assert.strictEqual(result.id, "claude");
+  });
+
   it("'chatgpt.com' → 回傳 null", () => {
     assert.strictEqual(selectPlatform("chatgpt.com"), null);
   });
