@@ -37,8 +37,10 @@
   const queued = []; // busy 時按 Enter 的訊息佇列，本回合結束後依序送出
   let overlay = null;
   let fontsInjected = false;
+  let lastRenderedFingerprint = ""; // 用於偵測 SPA 換頁時 claude.ai 的 DOM 是否已換上新對話
   // 進行中的計時器（換頁時需清除，避免舊對話的回應/輪詢寫進新對話）
   let activeResponseTimer = null; // watchResponse 的輪詢
+  let trackStreamingTimer = null; // trackIfStreaming 的輪詢（與 watchResponse 各自獨立，避免互相覆蓋）
   let introPoll = null; // startIntro 的訊息輪詢
   let reloadTimer = null; // SPA 換頁後延遲重載
   let openBookTimer = null; // 書封翻開動畫後移除書封的延遲計時器
@@ -117,6 +119,7 @@
             // （涵蓋「日記隱藏期間切換過對話」的邊界；非對話頁則維持隱藏不蓋頁面）
             lastUrl = location.href;
             resetState();
+            lastRenderedFingerprint = ""; // 重新啟用即是要立刻鋪上目前對話，不必等指紋改變
             const feed = overlay.querySelector("#rd-feed");
             if (feed) feed.innerHTML = "";
             startIntro();
@@ -135,6 +138,7 @@
   // 統一清除所有進行中的計時器並重置狀態（換頁／闔上／停用時呼叫，避免背景計時器空轉）
   function resetState() {
     if (activeResponseTimer) { clearInterval(activeResponseTimer); activeResponseTimer = null; }
+    if (trackStreamingTimer) { clearInterval(trackStreamingTimer); trackStreamingTimer = null; }
     if (introPoll) { clearInterval(introPoll); introPoll = null; }
     if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
     if (openBookTimer) { clearTimeout(openBookTimer); openBookTimer = null; }
@@ -173,7 +177,7 @@
       overlay.classList.remove("rd-hist-open");
       const feed = overlay.querySelector("#rd-feed");
       if (feed) feed.innerHTML = "";
-      reloadTimer = setTimeout(startIntro, 500); // 給 claude.ai 換上新對話內容的時間
+      reloadTimer = setTimeout(startIntro, 100); // 快速啟動，由 startIntro 內部的指紋比對確保 DOM 已換新
     }, 700);
   }
 
@@ -265,6 +269,7 @@
       overlay.style.pointerEvents = "";
     };
     peek.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return; // 只允許滑鼠左鍵／觸控；右鍵會跳出選單干擾 pointerup 還原，導致永久隱藏
       e.preventDefault();
       peekShow();
       window.addEventListener("pointerup", peekRestore, { once: true });
@@ -328,6 +333,12 @@
         const nodes = document.querySelectorAll(
           SELECTORS.userMsg + "," + SELECTORS.response
         );
+        // SPA 換對話時，claude.ai 的 DOM 可能還殘留上一段對話的訊息；
+        // 指紋與上次渲染相同代表 DOM 尚未換新，繼續等（逾時才放行，避免極端情況卡死）。
+        const fingerprint = Array.from(nodes).map((n) => n.textContent).join("|");
+        if (nodes.length && fingerprint === lastRenderedFingerprint && tries < 24) {
+          return;
+        }
         if (nodes.length) {
           clearInterval(introPoll);
           introPoll = null;
@@ -367,26 +378,29 @@
     });
     feed.appendChild(frag);
     feed.scrollTop = feed.scrollHeight;
+    // 記下這次渲染的內容指紋，供下次 SPA 換頁時比對 DOM 是否已換新
+    lastRenderedFingerprint = Array.from(nodes).map((n) => n.textContent).join("|");
   }
 
   // 若載入既有對話時 Claude 仍在串流，追蹤到串流結束後「重新整段渲染」（取得最終乾淨內文、避免重複）。
-  // 借用 activeResponseTimer，故換頁/闔上時 resetState() 會一併清掉。
+  // 用獨立的 trackStreamingTimer（不與 watchResponse 共用 activeResponseTimer），避免兩者互相覆蓋／誤清；
+  // 換頁/闔上時 resetState() 同樣會一併清掉。
   function trackIfStreaming() {
     if (!document.querySelector(SELECTORS.stopBtn)) return; // 沒在串流就不用追
     let stable = 0;
     let last = "";
-    activeResponseTimer = setInterval(() => {
+    trackStreamingTimer = setInterval(() => {
       if (!extValid() || !overlay || overlay.classList.contains("rd-hidden")) {
-        clearInterval(activeResponseTimer);
-        activeResponseTimer = null;
+        clearInterval(trackStreamingTimer);
+        trackStreamingTimer = null;
         return;
       }
       const streaming = !!document.querySelector(SELECTORS.stopBtn);
       const cur = latestResponseText();
       if (cur !== last) { last = cur; stable = 0; } else stable++;
       if (!streaming && stable >= 3) {
-        clearInterval(activeResponseTimer);
-        activeResponseTimer = null;
+        clearInterval(trackStreamingTimer);
+        trackStreamingTimer = null;
         renderExisting(
           document.querySelectorAll(SELECTORS.userMsg + "," + SELECTORS.response)
         );
@@ -591,7 +605,13 @@
     // 注意：execCommand 失敗時不一定丟例外，常是「回傳 false」——兩種都要視為失敗。
     let inserted = false;
     try {
-      document.execCommand("selectAll", false, null);
+      // 用 Selection API 精確選取「編輯器內部」的內容再覆寫，避免 execCommand("selectAll")
+      // 在 ed 尚未成為 activeElement 時誤選整頁、被 insertText 取代而造成畫面崩潰。
+      const sel = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(ed);
+      sel.removeAllRanges();
+      sel.addRange(range);
       inserted = document.execCommand("insertText", false, text);
     } catch (e) {
       inserted = false;
