@@ -13,8 +13,11 @@
     // 動態走訪已註冊平台，比對各自宣告的 domains（不在此硬編碼任何網域，
     // 新增平台只需在其設定檔加 domains，registry 不必改）。
     for (const p of Object.values(platforms)) {
-      const domains = (p && p.domains) || [];
+      const domains = p && p.domains;
+      // 防禦：domains 非陣列就跳過（字串會被 for...of 逐字迭代、其他型別會丟 TypeError）
+      if (!Array.isArray(domains)) continue;
       for (const d of domains) {
+        if (typeof d !== "string") continue;
         // 完全相等或子網域（用 "." + d 結尾比對，避免 evilclaude.ai 之類誤判）
         if (hostname === d || hostname.endsWith("." + d)) return p;
       }
