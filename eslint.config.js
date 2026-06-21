@@ -35,6 +35,8 @@ export default [
     },
     rules: {
       ...js.configs.recommended.rules,
+      // 顯式啟用 no-undef（純 JS 擴充，搭配上面的 browserGlobals 攔截 typo/未宣告全域）
+      "no-undef": "error",
       // content.js 的 catch (e) 刻意忽略例外（context 失效時的靜默降級），
       // 不要誤報未使用的 catch 參數
       "no-unused-vars": [
@@ -64,6 +66,7 @@ export default [
     },
     rules: {
       ...js.configs.recommended.rules,
+      "no-undef": "error", // 顯式啟用，搭配 nodeGlobals 攔截測試碼的 typo/未宣告變數
       "no-unused-vars": ["error", { vars: "all", args: "after-used" }],
     },
   },
