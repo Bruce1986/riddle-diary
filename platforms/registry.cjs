@@ -19,7 +19,7 @@
       // 防禦：domains 非陣列就跳過（字串會被 for...of 逐字迭代、其他型別會丟 TypeError）
       if (!Array.isArray(domains)) continue;
       for (const d of domains) {
-        if (typeof d !== "string") continue;
+        if (typeof d !== "string" || d.trim() === "") continue; // 跳過空字串/純空白，避免 endsWith(".") 誤配
         const normalizedDomain = d.toLowerCase();
         // 完全相等或子網域（用 "." + domain 結尾比對，避免 evilclaude.ai 之類誤判）。
         // 子網域比對純屬防禦性：manifest 刻意維持 apex-only（https://claude.ai/*），

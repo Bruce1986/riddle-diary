@@ -14,7 +14,8 @@
   // 避免後續存取缺漏屬性而丟 TypeError 讓 content script 崩潰。
   if (
     !PLATFORM ||
-    !PLATFORM.selectors ||
+    typeof PLATFORM.selectors !== "object" ||
+    PLATFORM.selectors === null ||
     typeof PLATFORM.isOverlayPath !== "function" ||
     typeof PLATFORM.isExistingConversationPath !== "function"
   ) {
