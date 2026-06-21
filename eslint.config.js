@@ -1,36 +1,21 @@
 // eslint.config.js — ESLint v9 flat config
 import js from "@eslint/js";
+import globals from "globals";
 
-// 瀏覽器腳本使用的全域（chrome extension 環境 + 瀏覽器 API）
+// 瀏覽器腳本使用的全域：用 globals.browser 全集（含 URL、CSS、fetch 等所有瀏覽器 API），
+// 避免逐一枚舉漏列導致 no-undef（本擴充零對外請求是執行期約束，與 lint 全域宣告無關）。
+// 另補 globalThis（不在 globals.browser 內）、Chrome Extension 的 chrome、UMD 包裝用的 module。
 const browserGlobals = {
-  // 瀏覽器標準
-  window: "readonly",
-  document: "readonly",
-  location: "readonly",
+  ...globals.browser,
   globalThis: "readonly",
-  sessionStorage: "readonly",
-  setInterval: "readonly",
-  clearInterval: "readonly",
-  setTimeout: "readonly",
-  clearTimeout: "readonly",
-  InputEvent: "readonly",
-  KeyboardEvent: "readonly",
-  DocumentFragment: "readonly",
-  // Chrome Extension API
   chrome: "readonly",
-  // Node UMD 支援（platforms/*.js 的 UMD 包裝需要）
   module: "readonly",
 };
 
-// Node.js 測試檔使用的全域
+// Node.js 測試/設定檔使用的全域（globals.node 全集 + globalThis）
 const nodeGlobals = {
-  require: "readonly",
-  module: "readonly",
-  process: "readonly",
+  ...globals.node,
   globalThis: "readonly",
-  __dirname: "readonly",
-  __filename: "readonly",
-  console: "readonly",
 };
 
 export default [
