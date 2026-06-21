@@ -112,6 +112,9 @@
     state.enabled = cfg.rd_enabled;
     state.persona = cfg.rd_persona;
     if (state.enabled && onOverlayPath()) buildOverlay();
+    // 不論初始頁面為何都立刻開始監看 SPA 換頁：否則初次落在非對話頁（如 /settings）時
+    // buildOverlay 不會被呼叫，監看也永遠不啟動，導航回對話頁就再也建不起日記。
+    watchUrlChanges();
   });
 
   try {
@@ -158,6 +161,9 @@
     lastCleanedNode = null;
     lastCleanedTextContent = "";
     lastCleanedResult = "";
+    // Gemini-review: 刻意「不」在此清 lastRenderedFingerprint。resetState 在 chat→chat 切換時會
+    // 緊接著 startIntro 之前被呼叫；若這裡清空，startIntro 會把仍殘留的「上一個對話」DOM 當成新內容
+    // 立即渲染（stale bug 重現）。返回同一對話的 15s 延遲改在 watchUrlChanges 以「離開對話頁時清指紋」處理。
   }
 
   // 監看 SPA 換頁：claude.ai 在側邊欄切換對話不會重整頁面，
@@ -169,7 +175,15 @@
       if (location.href === lastUrl) return;
       const oldUrl = lastUrl;
       lastUrl = location.href; // 隨時更新；隱藏時切換對話的重載改由「重新啟用」時主動處理
-      if (!overlay) return;
+      // 初次落在非對話頁時 overlay 尚未建立；導航進對話頁就在此補建（監看已於啟動時開跑）
+      if (!overlay) {
+        if (state.enabled && onOverlayPath()) buildOverlay();
+        return;
+      }
+      // 離開對話頁（去 /new、/、/settings…）→ 清掉指紋。否則「對話A → /new → 對話A」返回時，
+      // 殘留的 A 指紋會讓 startIntro 誤判 DOM 未更新而空等到逾時（~15s）。chat→chat 直接切換時
+      // 目的地仍是 /chat/，不會清，stale 偵測照常運作。
+      if (!/^\/chat\//.test(location.pathname)) lastRenderedFingerprint = "";
       // 導航到非對話頁（/settings、/login…）→ 隱藏日記，別蓋住頁面
       if (!onOverlayPath()) {
         if (!overlay.classList.contains("rd-hidden")) {
@@ -326,8 +340,7 @@
     } else {
       onActivate(cover, openBook);
     }
-
-    watchUrlChanges(); // 開始監看 SPA 換頁
+    // SPA 換頁監看已於最外層啟動時開跑，這裡不再重複呼叫（避免多個輪詢計時器）
   }
 
   // ── 啟動書封動畫 ────────────────────────────────────────────────
@@ -557,8 +570,8 @@
   // startIntro 與 renderExisting 必須共用同一演算法，否則比對永遠不相等。
   function fingerprintNodes(nodes) {
     if (!nodes.length) return "";
-    const first = nodes[0].textContent.slice(0, 100);
-    const last = nodes[nodes.length - 1].textContent.slice(-100);
+    const first = (nodes[0].textContent || "").slice(0, 100);
+    const last = (nodes[nodes.length - 1].textContent || "").slice(-100);
     return nodes.length + "|" + first + "|" + last;
   }
 
@@ -593,7 +606,7 @@
       }
     })(node);
     // 把 nbsp 還原為一般空格；3+ 連續換行收斂成 2，避免巢狀區塊產生過多空行
-    let t = raw.replace(/ /g, " ").replace(/\n{3,}/g, "\n\n").trim();
+    let t = raw.replace(/\u00a0/g, " ").replace(/\n{3,}/g, "\n\n").trim();
     // 去掉開頭可能殘留的無障礙標籤（無障礙複本已由 SELECTORS.noise 的 .sr-only 移除，
     // 不做「整段去重複」——那會誤砍回覆中合法的重複，如「哈哈 哈哈」、詩句、列表）
     t = t.replace(/^(Claude\s+(responded|said)|You\s+said)\s*:?\s*/i, "");
