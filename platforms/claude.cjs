@@ -5,7 +5,7 @@
 (function (root) {
   "use strict";
 
-  var PLATFORM = {
+  const PLATFORM = {
     id: "claude",
     siteName: "claude.ai",
     // 此平台負責的網域（registry 動態比對：完全相等或子網域 *.claude.ai）。
@@ -58,7 +58,7 @@
     },
   };
 
-  var api = (root.RiddleDiary = root.RiddleDiary || {});
+  const api = (root.RiddleDiary = root.RiddleDiary || {});
   api.platforms = api.platforms || {};
   api.platforms.claude = PLATFORM;
 
