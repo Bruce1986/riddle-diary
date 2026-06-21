@@ -89,9 +89,10 @@
   }
   function safeStorageGet(defaults, cb) {
     try {
-      chrome.storage.sync.get(defaults, cb);
+      if (extValid()) chrome.storage.sync.get(defaults, cb);
+      else cb(defaults); // context 失效 → 用預設值（與 safeStorageSet 一致）
     } catch (e) {
-      cb(defaults); // context 失效 → 用預設值
+      cb(defaults);
     }
   }
   function safeStorageSet(obj) {
@@ -224,7 +225,7 @@
         </div>
 
         <div id="rd-feed"></div>
-        <textarea id="rd-pen" rows="1" placeholder="在此落筆…（Enter 送出，Shift+Enter 換行）"></textarea>
+        <textarea id="rd-pen" rows="1" placeholder="在此落筆…（Enter 送出，Shift+Enter 換行）" aria-label="日記輸入區域"></textarea>
         <div id="rd-caption">羽毛筆 · 墨水會自行滲入紙頁，再由日記回應你</div>
 
         <div id="rd-cover" role="button" tabindex="0" aria-label="輕觸翻開日記">
@@ -339,7 +340,7 @@
         );
         // SPA 換對話時，claude.ai 的 DOM 可能還殘留上一段對話的訊息；
         // 指紋與上次渲染相同代表 DOM 尚未換新，繼續等（逾時才放行，避免極端情況卡死）。
-        const fingerprint = Array.from(nodes).map((n) => n.textContent).join("|");
+        const fingerprint = fingerprintNodes(nodes);
         if (nodes.length && fingerprint === lastRenderedFingerprint && tries < 24) {
           return;
         }
@@ -382,8 +383,8 @@
     });
     feed.appendChild(frag);
     feed.scrollTop = feed.scrollHeight;
-    // 記下這次渲染的內容指紋，供下次 SPA 換頁時比對 DOM 是否已換新
-    lastRenderedFingerprint = Array.from(nodes).map((n) => n.textContent).join("|");
+    // 記下這次渲染的內容指紋，供下次 SPA 換頁時比對 DOM 是否已換新（與 startIntro 共用演算法）
+    lastRenderedFingerprint = fingerprintNodes(Array.from(nodes));
   }
 
   // 若載入既有對話時 Claude 仍在串流，追蹤到串流結束後「重新整段渲染」（取得最終乾淨內文、避免重複）。
@@ -441,8 +442,10 @@
         title = (c.textContent || "").replace(/\s+/g, " ").trim();
       }
       if (!title) return;
-      // 後備：剝除後若仍出現「整段重複兩次」（可見 + 無障礙複本）才砍半
-      const dup = title.match(/^(.{2,}?)\s*\1$/);
+      // 後備：剝除後若仍出現「整段重複兩次」（可見 + 無障礙複本）才砍半。
+      // Gemini-review: 刻意保留此去重（無障礙複本仍可能漏網），但要求兩半之間「有空白分隔」
+      // （\s+ 而非 \s*），如此「我的對話 我的對話」會砍半，而合法連寫的「哈哈哈哈」不會被誤切。
+      const dup = title.match(/^(.{2,}?)\s+\1$/);
       if (dup) title = dup[1].trim();
       if (title.length > 40) title = title.slice(0, 40) + "…";
       seen.add(href);
@@ -518,7 +521,25 @@
   // 只會去除「完全相同」的節點，不會去除巢狀），不過濾會造成同一則訊息被算兩次／渲染兩次。
   function outermost(nodeList) {
     const arr = Array.from(nodeList);
-    return arr.filter((n) => !arr.some((m) => m !== n && m.contains(n)));
+    const set = new Set(arr); // 改用祖先回溯：O(N×深度) 取代原本 O(N²) 的兩兩 contains 檢查
+    return arr.filter((n) => {
+      let p = n.parentNode;
+      while (p) {
+        if (set.has(p)) return false; // 有祖先也在集合內 → 是內層節點，濾掉
+        p = p.parentNode;
+      }
+      return true;
+    });
+  }
+
+  // SPA 換頁偵測用的輕量指紋：節點數 + 首尾節點各取片段，
+  // 避免長對話每 300ms 把整段 textContent 拼接造成 CPU／GC 壓力。
+  // startIntro 與 renderExisting 必須共用同一演算法，否則比對永遠不相等。
+  function fingerprintNodes(nodes) {
+    if (!nodes.length) return "";
+    const first = nodes[0].textContent.slice(0, 100);
+    const last = nodes[nodes.length - 1].textContent.slice(-100);
+    return nodes.length + "|" + first + "|" + last;
   }
 
   function responseNodes() {
