@@ -333,6 +333,7 @@
           introPoll = null;
           renderExisting(nodes);
           if (pen) pen.focus();
+          trackIfStreaming(); // 若載入時對話仍在串流，追蹤到完成後重新整段渲染
         } else if (tries > 24) {
           clearInterval(introPoll);
           introPoll = null;
@@ -366,6 +367,31 @@
     });
     feed.appendChild(frag);
     feed.scrollTop = feed.scrollHeight;
+  }
+
+  // 若載入既有對話時 Claude 仍在串流，追蹤到串流結束後「重新整段渲染」（取得最終乾淨內文、避免重複）。
+  // 借用 activeResponseTimer，故換頁/闔上時 resetState() 會一併清掉。
+  function trackIfStreaming() {
+    if (!document.querySelector(SELECTORS.stopBtn)) return; // 沒在串流就不用追
+    let stable = 0;
+    let last = "";
+    activeResponseTimer = setInterval(() => {
+      if (!extValid() || !overlay || overlay.classList.contains("rd-hidden")) {
+        clearInterval(activeResponseTimer);
+        activeResponseTimer = null;
+        return;
+      }
+      const streaming = !!document.querySelector(SELECTORS.stopBtn);
+      const cur = latestResponseText();
+      if (cur !== last) { last = cur; stable = 0; } else stable++;
+      if (!streaming && stable >= 3) {
+        clearInterval(activeResponseTimer);
+        activeResponseTimer = null;
+        renderExisting(
+          document.querySelectorAll(SELECTORS.userMsg + "," + SELECTORS.response)
+        );
+      }
+    }, 400);
   }
 
   // ── 歷史篇章（書籤翻頁） ────────────────────────────────────────
@@ -442,12 +468,16 @@
     feed.appendChild(line);
     const spans = line.querySelectorAll("span");
     const step = cls === "rd-me" ? 26 : 65;
+    // 長文分批浮現：每 tick 顯示 batch 個字，把總 tick 數壓在 ~120 以內，
+    // 避免超長回覆產生數千個 setTimeout／重排造成卡頓（短文 batch=1，視覺不變）。
+    const batch = Math.max(1, Math.ceil(spans.length / 120));
     let i = 0;
     (function reveal() {
       if (!line.isConnected) return; // 節點已被移除（如換頁清空 feed）→ 停止，避免孤兒計時器
       if (i < spans.length) {
-        spans[i].style.opacity = 1;
-        i++;
+        for (let n = 0; n < batch && i < spans.length; n++, i++) {
+          spans[i].style.opacity = 1;
+        }
         feed.scrollTop = feed.scrollHeight;
         setTimeout(reveal, step);
       } else if (done) {
@@ -501,14 +531,15 @@
   function submit(raw) {
     const pen = overlay.querySelector("#rd-pen");
     const text = (raw || "").trim();
-    pen.value = ""; // 一律先清空（連只輸入空白/換行的情況也清掉）
-    pen.style.height = "auto";
-    if (!text) return;
     // 編輯器不存在時，不進入 busy（否則佇列會卡死）；直接提示後結束。
-    if (!document.querySelector(SELECTORS.editor)) {
+    // 注意：此時「不清空輸入框」，避免使用者辛苦打的字在頁面異常下被吞掉。
+    if (text && !document.querySelector(SELECTORS.editor)) {
       ink("（紙頁無法與底下的墨池相連…請確認頁面已開啟一個對話）", "rd-diary");
       return;
     }
+    pen.value = ""; // 確認可送出（或只是空白/換行）才清空
+    pen.style.height = "auto";
+    if (!text) return;
     if (busy) {
       queued.push(text); // 正在回覆 → 排入佇列（輪到時才繪製，避免與動畫重疊；placeholder 已提示）
       return;
