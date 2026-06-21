@@ -50,10 +50,14 @@
       return /^\/chat\//.test(pathname);
     },
 
-    // 輸入策略：送出時使用 ProseMirror / execCommand / beforeinput 流程
+    // 輸入策略：送出時使用 ProseMirror / execCommand / beforeinput 流程。
+    // ※ 此欄位刻意先以 schema 形式就位、content.js 尚未消費：依 DEVPLAN，
+    //   writeStrategy:"cssOnly" 的 content.js 分支屬 T3（ChatGPT 純 CSS 變體）的範圍。
     writeStrategy: "prosemirror",
 
-    // 功能旗標（為日後多平台預留，claude.ai 預設全開）
+    // 功能旗標（為日後多平台預留，claude.ai 預設全開）。
+    // ※ features.history=false 的歷史降級屬 T2（Gemini）的範圍，T0 不在 content.js 接線，
+    //   以免侵入後續工作包；claude 一律走現有預設行為（行為不變）。
     features: {
       history: true,
     },
