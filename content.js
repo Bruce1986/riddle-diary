@@ -37,18 +37,18 @@
   const queued = []; // busy 時按 Enter 的訊息佇列，本回合結束後依序送出
   let overlay = null;
   let fontsInjected = false;
-  let lastRenderedFingerprint = ""; // 用於偵測 SPA 換頁時 claude.ai 的 DOM 是否已換上新對話
+  // 上次渲染的 DOM 節點實例集合，用於偵測 SPA 換頁是否已換新：比字串指紋更精準——
+  // 即使新舊對話文字完全相同，React 重掛載出的也是全新節點實例，故能「零延遲」分辨。
+  let lastRenderedNodes = new Set();
   // 進行中的計時器（換頁時需清除，避免舊對話的回應/輪詢寫進新對話）
   let activeResponseTimer = null; // watchResponse 的輪詢
   let trackStreamingTimer = null; // trackIfStreaming 的輪詢（與 watchResponse 各自獨立，避免互相覆蓋）
   let introPoll = null; // startIntro 的訊息輪詢
   let reloadTimer = null; // SPA 換頁後延遲重載
   let openBookTimer = null; // 書封翻開動畫後移除書封的延遲計時器
-  // cleanText 快取：串流期間每 300ms 會重複以相同內容呼叫，命中快取可省去整棵子樹的遞迴走訪。
-  // 鍵為節點識別 + textContent（快速、不觸發重排的屬性）。
-  let lastCleanedNode = null;
-  let lastCleanedTextContent = "";
-  let lastCleanedResult = "";
+  // cleanText 快取：以 WeakMap 同時快取多個節點（renderExisting 逐則擷取都受益），
+  // 值為 { textContent, result }；節點從 DOM 移除後由 GC 自動釋放，無需手動清理、不洩漏。
+  const cleanTextCache = new WeakMap();
 
   // 只在「對話相關」頁面顯示日記，避免蓋住登入頁、設定頁等
   function onOverlayPath() {
@@ -130,7 +130,7 @@
             // （涵蓋「日記隱藏期間切換過對話」的邊界；非對話頁則維持隱藏不蓋頁面）
             lastUrl = location.href;
             resetState();
-            lastRenderedFingerprint = ""; // 重新啟用即是要立刻鋪上目前對話，不必等指紋改變
+            lastRenderedNodes.clear(); // 重新啟用即是要立刻鋪上目前對話，不必等節點換新
             const feed = overlay.querySelector("#rd-feed");
             if (feed) feed.innerHTML = "";
             startIntro();
@@ -157,13 +157,10 @@
     queued.length = 0;
     const pen = overlay && overlay.querySelector("#rd-pen");
     if (pen) pen.placeholder = PEN_PLACEHOLDER;
-    // 清掉 cleanText 快取，避免持有已從 DOM 移除（detached）的節點參照造成記憶體洩漏
-    lastCleanedNode = null;
-    lastCleanedTextContent = "";
-    lastCleanedResult = "";
-    // Gemini-review: 刻意「不」在此清 lastRenderedFingerprint。resetState 在 chat→chat 切換時會
-    // 緊接著 startIntro 之前被呼叫；若這裡清空，startIntro 會把仍殘留的「上一個對話」DOM 當成新內容
-    // 立即渲染（stale bug 重現）。返回同一對話的 15s 延遲改在 watchUrlChanges 以「離開對話頁時清指紋」處理。
+    // cleanText 快取改用 WeakMap：節點被 GC 時自動釋放，無需在此手動清理。
+    // Gemini-review: 刻意「不」在此清 lastRenderedNodes。resetState 在 chat→chat 切換時會
+    // 緊接著 startIntro 之前被呼叫；若這裡清空，startIntro 的 isStale 比對會把仍殘留的「上一個對話」
+    // DOM 當成新內容立即渲染（stale bug 重現）。離開對話頁時的清除改在 watchUrlChanges 處理。
   }
 
   // 監看 SPA 換頁：claude.ai 在側邊欄切換對話不會重整頁面，
@@ -180,10 +177,9 @@
         if (state.enabled && onOverlayPath()) buildOverlay();
         return;
       }
-      // 離開對話頁（去 /new、/、/settings…）→ 清掉指紋。否則「對話A → /new → 對話A」返回時，
-      // 殘留的 A 指紋會讓 startIntro 誤判 DOM 未更新而空等到逾時（~15s）。chat→chat 直接切換時
-      // 目的地仍是 /chat/，不會清，stale 偵測照常運作。
-      if (!/^\/chat\//.test(location.pathname)) lastRenderedFingerprint = "";
+      // 離開對話頁（去 /new、/、/settings…）→ 清掉上次節點集合，釋放對 detached 節點的參照。
+      // chat→chat 直接切換時目的地仍是 /chat/，不會清，stale 偵測照常運作。
+      if (!/^\/chat\//.test(location.pathname)) lastRenderedNodes.clear();
       // 導航到非對話頁（/settings、/login…）→ 隱藏日記，別蓋住頁面
       if (!onOverlayPath()) {
         if (!overlay.classList.contains("rd-hidden")) {
@@ -370,9 +366,9 @@
           SELECTORS.userMsg + "," + SELECTORS.response
         );
         // SPA 換對話時，claude.ai 的 DOM 可能還殘留上一段對話的訊息；
-        // 指紋與上次渲染相同代表 DOM 尚未換新，繼續等（逾時才放行，避免極端情況卡死）。
-        const fingerprint = fingerprintNodes(nodes);
-        if (nodes.length && fingerprint === lastRenderedFingerprint && tries < MAX_TRIES) {
+        // 若當前任一節點仍是「上次渲染過的同一實例」，代表 DOM 尚未換新，繼續等（逾時才放行）。
+        const isStale = Array.from(nodes).some((node) => lastRenderedNodes.has(node));
+        if (nodes.length && isStale && tries < MAX_TRIES) {
           return;
         }
         if (nodes.length) {
@@ -416,8 +412,8 @@
     });
     feed.appendChild(frag);
     feed.scrollTop = feed.scrollHeight;
-    // 記下這次渲染的內容指紋，供下次 SPA 換頁時比對 DOM 是否已換新（與 startIntro 共用演算法）
-    lastRenderedFingerprint = fingerprintNodes(Array.from(nodes));
+    // 記下這次渲染的節點實例，供下次 SPA 換頁時比對 DOM 是否已換新
+    lastRenderedNodes = new Set(nodes);
   }
 
   // 若載入既有對話時 Claude 仍在串流，追蹤到串流結束後「重新整段渲染」（取得最終乾淨內文、避免重複）。
@@ -565,16 +561,6 @@
     });
   }
 
-  // SPA 換頁偵測用的輕量指紋：節點數 + 首尾節點各取片段，
-  // 避免長對話每 300ms 把整段 textContent 拼接造成 CPU／GC 壓力。
-  // startIntro 與 renderExisting 必須共用同一演算法，否則比對永遠不相等。
-  function fingerprintNodes(nodes) {
-    if (!nodes.length) return "";
-    const first = (nodes[0].textContent || "").slice(0, 100);
-    const last = (nodes[nodes.length - 1].textContent || "").slice(-100);
-    return nodes.length + "|" + first + "|" + last;
-  }
-
   function responseNodes() {
     return outermost(document.querySelectorAll(SELECTORS.response));
   }
@@ -584,8 +570,9 @@
     if (!node) return "";
     // 快取命中（同一節點且 textContent 未變）→ 直接回傳，省去下方整棵子樹的遞迴走訪。
     // textContent 是不觸發重排的快速屬性，串流期間重複呼叫可大幅降低重複計算。
-    if (node === lastCleanedNode && node.textContent === lastCleanedTextContent) {
-      return lastCleanedResult;
+    const cached = cleanTextCache.get(node);
+    if (cached && cached.textContent === node.textContent) {
+      return cached.result;
     }
     // 純記憶體遞迴走訪取代「clone→掛載→讀 innerText」：完全不掛載到 document，
     // 不觸發任何同步重排（reflow）。長對話 renderExisting 逐則擷取時尤其關鍵——舊作法每則都
@@ -610,9 +597,7 @@
     // 去掉開頭可能殘留的無障礙標籤（無障礙複本已由 SELECTORS.noise 的 .sr-only 移除，
     // 不做「整段去重複」——那會誤砍回覆中合法的重複，如「哈哈 哈哈」、詩句、列表）
     t = t.replace(/^(Claude\s+(responded|said)|You\s+said)\s*:?\s*/i, "");
-    lastCleanedNode = node;
-    lastCleanedTextContent = node.textContent;
-    lastCleanedResult = t;
+    cleanTextCache.set(node, { textContent: node.textContent, result: t });
     return t;
   }
   function latestResponseText() {
