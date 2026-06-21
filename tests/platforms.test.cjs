@@ -1,7 +1,7 @@
 // tests/platforms.test.cjs — node:test 單元測試（CommonJS，搭配 UMD 的 require 載入）
 "use strict";
 
-const { describe, it, before } = require("node:test");
+const { describe, it, before, after } = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
 
@@ -104,6 +104,13 @@ describe("registry.selectPlatform", () => {
 
   it("空字串 '' → 回傳 null", () => {
     assert.strictEqual(selectPlatform(""), null);
+  });
+
+  it("非字串（null/undefined/number）→ 回傳 null，不丟例外", () => {
+    assert.strictEqual(selectPlatform(null), null);
+    assert.strictEqual(selectPlatform(undefined), null);
+    assert.strictEqual(selectPlatform(123), null);
+    assert.strictEqual(selectPlatform(), null);
   });
 });
 
@@ -228,15 +235,14 @@ describe("manifest 載入順序（browser-like: registry.cjs → claude.cjs）",
     assert.strictEqual(result.id, "claude", "回傳物件的 id 應為 'claude'");
   });
 
-  // 收尾：還原 globalThis.RiddleDiary 並清掉 cache，避免污染其他測試
-  // node:test 目前沒有 after()，利用最後一個 it 收尾
-  it("還原 globalThis.RiddleDiary（清理沙箱）", () => {
+  // 收尾：還原 globalThis.RiddleDiary 並清掉 cache，避免污染其他測試。
+  // 用 node:test 原生 after() hook，即使前面 it 失敗也保證清理，語意也更精確。
+  after(() => {
     delete require.cache[registryPath];
     delete require.cache[claudePath];
     globalThis.RiddleDiary = savedRiddleDiary;
     // 重新 require 讓後續其他 describe 用的參照仍然有效
     require(registryPath);
     require(claudePath);
-    assert.ok(true, "沙箱清理完成");
   });
 });

@@ -6,7 +6,8 @@
   // ── 平台設定（由 platforms/registry.cjs + platforms/claude.cjs 在本腳本前載入） ──
   // manifest content_scripts.js 載入順序：registry.cjs → claude.cjs → content.js
   const PLATFORM =
-    globalThis.RiddleDiary && globalThis.RiddleDiary.selectPlatform
+    globalThis.RiddleDiary &&
+    typeof globalThis.RiddleDiary.selectPlatform === "function"
       ? globalThis.RiddleDiary.selectPlatform(location.hostname)
       : null;
   if (!PLATFORM) return; // 非已知平台 → 不啟用覆蓋層

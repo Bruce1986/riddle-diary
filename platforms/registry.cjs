@@ -6,6 +6,8 @@
   "use strict";
 
   function selectPlatform(hostname) {
+    // 防禦：非字串（null/undefined 等）直接視為無對應，避免 hostname.endsWith 丟 TypeError
+    if (typeof hostname !== "string") return null;
     var api = root.RiddleDiary || {};
     var p = api.platforms || {};
     // 用結尾比對避免子網域誤判（claude.ai 與 *.claude.ai）；只比對已註冊平台
