@@ -161,6 +161,8 @@
     // Gemini-review: 刻意「不」在此清 lastRenderedNodes。resetState 在 chat→chat 切換時會
     // 緊接著 startIntro 之前被呼叫；若這裡清空，startIntro 的 isStale 比對會把仍殘留的「上一個對話」
     // DOM 當成新內容立即渲染（stale bug 重現）。離開對話頁時的清除改在 watchUrlChanges 處理。
+    // 但若是「停用」日記（!state.enabled），不會再 startIntro，故可安全清空、釋放對 detached 節點的強引用。
+    if (!state.enabled) lastRenderedNodes.clear();
   }
 
   // 監看 SPA 換頁：claude.ai 在側邊欄切換對話不會重整頁面，
@@ -283,6 +285,7 @@
 
     overlay.querySelector("#rd-close").addEventListener("click", () => {
       overlay.classList.add("rd-hidden"); // 直接隱藏，不依賴 storage 事件
+      state.enabled = false; // 同步更新，讓 resetState 能據此清掉 lastRenderedNodes（storage 事件是非同步的）
       resetState(); // 清掉背景計時器，避免隱藏後還在空轉
       safeStorageSet({ rd_enabled: false }); // 盡力持久化（context 失效時略過）
     });
@@ -298,15 +301,19 @@
     const peekRestore = () => {
       overlay.style.opacity = "";
       overlay.style.pointerEvents = "";
+      // 三個監聽互斥（只會觸發其一），用 once 會殘留另外兩個 → 手動全部移除，避免事件監聽洩漏
+      window.removeEventListener("pointerup", peekRestore);
+      window.removeEventListener("pointercancel", peekRestore);
+      window.removeEventListener("blur", peekRestore);
     };
     peek.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return; // 只允許滑鼠左鍵／觸控；右鍵會跳出選單干擾 pointerup 還原，導致永久隱藏
       e.preventDefault();
       peekShow();
-      window.addEventListener("pointerup", peekRestore, { once: true });
-      window.addEventListener("pointercancel", peekRestore, { once: true });
+      window.addEventListener("pointerup", peekRestore);
+      window.addEventListener("pointercancel", peekRestore);
       // 視窗失焦（切分頁/alt-tab，或在視窗外放開滑鼠）時 pointerup 可能不在 window 觸發 → 一併還原，避免永久隱藏
-      window.addEventListener("blur", peekRestore, { once: true });
+      window.addEventListener("blur", peekRestore);
     });
     // 鍵盤／螢幕閱讀器：按住 Space/Enter 看一眼，放開或失焦即恢復
     peek.addEventListener("keydown", (e) => {
@@ -581,7 +588,7 @@
     // 不觸發任何同步重排（reflow）。長對話 renderExisting 逐則擷取時尤其關鍵——舊作法每則都
     // 強制 layout，數百則會明顯卡頓；也不再依賴 innerText（隱藏狀態下可能回空字串）。
     // 區塊級標籤前後補換行以保留段落；text node 直接取 nodeValue，code/pre 內的空白自然保留。
-    const blockTags = new Set(["p", "div", "br", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "pre"]);
+    const blockTags = new Set(["p", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "pre"]);
     let raw = "";
     (function walk(n) {
       if (n.nodeType === Node.TEXT_NODE) {
@@ -589,10 +596,13 @@
       } else if (n.nodeType === Node.ELEMENT_NODE) {
         if (n.matches(SELECTORS.noise)) return; // 整段略過雜訊子樹（無障礙標籤、按鈕、思考區塊）
         const tag = n.tagName.toLowerCase();
+        // br 顯式補一個 \n（不放進 blockTags 的 dedupe 邏輯）：否則連續 <br><br> 會因「已以 \n 結尾」
+        // 被吃掉一個，使段落間的空行消失。多餘的連續換行由後面的 \n{3,}→\n\n 收斂。
+        if (tag === "br") { raw += "\n"; return; }
         const isBlock = blockTags.has(tag);
         if (isBlock && raw && !raw.endsWith("\n")) raw += "\n";
         for (let i = 0; i < n.childNodes.length; i++) walk(n.childNodes[i]);
-        if (isBlock && tag !== "br" && !raw.endsWith("\n")) raw += "\n";
+        if (isBlock && !raw.endsWith("\n")) raw += "\n";
       }
     })(node);
     // 把 nbsp 還原為一般空格；3+ 連續換行收斂成 2，避免巢狀區塊產生過多空行
