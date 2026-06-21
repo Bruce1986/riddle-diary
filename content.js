@@ -66,6 +66,9 @@
       return; // context 失效，改用系統字型 fallback
     }
     fontsInjected = true;
+    // 擴充重載後新 context 的 fontsInjected 為 false，會再注入一次；先移除舊標籤避免 DOM 殘留重複
+    const staleFont = document.getElementById("rd-fontface");
+    if (staleFont) staleFont.remove();
     const style = document.createElement("style");
     style.id = "rd-fontface";
     style.textContent =
@@ -722,7 +725,12 @@
       busy = false;
       if (queued.length) return startTurn(queued.shift()); // 還有排隊 → 送下一則（已先顯示過）
       const pen = overlay && overlay.querySelector("#rd-pen");
-      if (pen) pen.placeholder = PEN_PLACEHOLDER; // 全部回完 → 還原提示
+      if (pen) {
+        pen.placeholder = PEN_PLACEHOLDER; // 全部回完 → 還原提示
+        // sendToClaude 期間焦點被移到底層 ProseMirror；回完後搶回日記輸入框，
+        // 否則使用者後續輸入會打進隱藏的 Claude 編輯器（看不到，且 Enter 可能誤送）
+        pen.focus();
+      }
     };
     ink(text || "（這次紙頁沒有回音……再試一次？）", "rd-diary", after);
   }
