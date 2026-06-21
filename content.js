@@ -44,9 +44,8 @@
   let introPoll = null; // startIntro 的訊息輪詢
   let reloadTimer = null; // SPA 換頁後延遲重載
   let openBookTimer = null; // 書封翻開動畫後移除書封的延遲計時器
-  let rdTextHolder = null; // cleanText 重複使用的離畫面容器（已移除 visibility:hidden，避免 innerText 變空）
-  // cleanText 快取：串流期間每 300ms 會重複以相同內容呼叫，命中快取可省去 clone+掛載+innerText
-  // 的同步重排（reflow）。鍵為節點識別 + textContent（快速、不觸發重排的屬性）。
+  // cleanText 快取：串流期間每 300ms 會重複以相同內容呼叫，命中快取可省去整棵子樹的遞迴走訪。
+  // 鍵為節點識別 + textContent（快速、不觸發重排的屬性）。
   let lastCleanedNode = null;
   let lastCleanedTextContent = "";
   let lastCleanedResult = "";
@@ -570,31 +569,31 @@
   // 擷取節點的乾淨內文：剔除無障礙標籤、按鈕、思考區塊
   function cleanText(node) {
     if (!node) return "";
-    // 快取命中（同一節點且 textContent 未變）→ 直接回傳，省去下方 clone+掛載+innerText 的同步重排。
-    // textContent 是不觸發重排的快速屬性，串流期間重複呼叫可大幅降低 reflow 次數。
+    // 快取命中（同一節點且 textContent 未變）→ 直接回傳，省去下方整棵子樹的遞迴走訪。
+    // textContent 是不觸發重排的快速屬性，串流期間重複呼叫可大幅降低重複計算。
     if (node === lastCleanedNode && node.textContent === lastCleanedTextContent) {
       return lastCleanedResult;
     }
-    const clone = node.cloneNode(true);
-    clone.querySelectorAll(SELECTORS.noise).forEach((el) => el.remove());
-    // innerText 在「未掛載節點」會退化為 textContent（丟失段落換行）；掛到離畫面容器再讀。
-    // 容器靠 position:absolute;left:-99999px 移出畫面即可，「不可」用 display:none
-    // （innerText 會變空字串）；也刻意不加 visibility:hidden——Blink 對 visibility:hidden
-    // 元素呼叫 innerText 同樣可能回空字串，會破壞整個訊息擷取。重複使用同一容器避免重排。
-    if (!rdTextHolder || !rdTextHolder.isConnected) {
-      // 用固定 id 復用，避免擴充重載後新舊腳本各建一個、殘留 DOM 節點
-      rdTextHolder = document.getElementById("rd-text-holder");
-      if (!rdTextHolder) {
-        rdTextHolder = document.createElement("div");
-        rdTextHolder.id = "rd-text-holder";
-        rdTextHolder.style.cssText =
-          "position:absolute;left:-99999px;top:0;width:640px;white-space:pre-wrap;";
-        document.documentElement.appendChild(rdTextHolder);
+    // 純記憶體遞迴走訪取代「clone→掛載→讀 innerText」：完全不掛載到 document，
+    // 不觸發任何同步重排（reflow）。長對話 renderExisting 逐則擷取時尤其關鍵——舊作法每則都
+    // 強制 layout，數百則會明顯卡頓；也不再依賴 innerText（隱藏狀態下可能回空字串）。
+    // 區塊級標籤前後補換行以保留段落；text node 直接取 nodeValue，code/pre 內的空白自然保留。
+    const blockTags = new Set(["p", "div", "br", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "pre"]);
+    let raw = "";
+    (function walk(n) {
+      if (n.nodeType === Node.TEXT_NODE) {
+        raw += n.nodeValue;
+      } else if (n.nodeType === Node.ELEMENT_NODE) {
+        if (n.matches(SELECTORS.noise)) return; // 整段略過雜訊子樹（無障礙標籤、按鈕、思考區塊）
+        const tag = n.tagName.toLowerCase();
+        const isBlock = blockTags.has(tag);
+        if (isBlock && raw && !raw.endsWith("\n")) raw += "\n";
+        for (let i = 0; i < n.childNodes.length; i++) walk(n.childNodes[i]);
+        if (isBlock && tag !== "br" && !raw.endsWith("\n")) raw += "\n";
       }
-    }
-    rdTextHolder.replaceChildren(clone);
-    let t = (clone.innerText || "").replace(/ /g, " ").trim();
-    rdTextHolder.replaceChildren(); // 清空內容但保留容器供下次重用
+    })(node);
+    // 把 nbsp 還原為一般空格；3+ 連續換行收斂成 2，避免巢狀區塊產生過多空行
+    let t = raw.replace(/ /g, " ").replace(/\n{3,}/g, "\n\n").trim();
     // 去掉開頭可能殘留的無障礙標籤（無障礙複本已由 SELECTORS.noise 的 .sr-only 移除，
     // 不做「整段去重複」——那會誤砍回覆中合法的重複，如「哈哈 哈哈」、詩句、列表）
     t = t.replace(/^(Claude\s+(responded|said)|You\s+said)\s*:?\s*/i, "");
@@ -622,7 +621,10 @@
     pen.style.height = "auto";
     if (!text) return;
     if (busy) {
-      queued.push(text); // 正在回覆 → 排入佇列（輪到時才繪製，避免與動畫重疊；placeholder 已提示）
+      // Gemini-review: 刻意「不」在此立刻 ink 排隊訊息。finish() 是把回覆 append 到 feed 尾端，
+      // 若現在就畫使用者的下一句，順序會變成 [我A][我B][日記A][日記B]——B 插到 A 的回覆之前，時序錯亂。
+      // 故排隊訊息延到 startTurn 出列時才繪製；即時回饋已由 PEN_PLACEHOLDER_BUSY 提示「會依序送出」。
+      queued.push(text);
       return;
     }
     startTurn(text);
