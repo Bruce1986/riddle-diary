@@ -434,7 +434,8 @@
       if (!title) {
         const c = a.cloneNode(true);
         c.querySelectorAll(SELECTORS.noise + ", svg").forEach((el) => el.remove());
-        title = (c.innerText || c.textContent || "").replace(/\s+/g, " ").trim();
+        // c 尚未掛載，Chrome 對未掛載節點的 innerText 會回空字串；雜訊已剝除，直接用 textContent
+        title = (c.textContent || "").replace(/\s+/g, " ").trim();
       }
       if (!title) return;
       // 後備：剝除後若仍出現「整段重複兩次」（可見 + 無障礙複本）才砍半
@@ -613,11 +614,13 @@
       // 用 Selection API 精確選取「編輯器內部」的內容再覆寫，避免 execCommand("selectAll")
       // 在 ed 尚未成為 activeElement 時誤選整頁、被 insertText 取代而造成畫面崩潰。
       const sel = window.getSelection();
-      const range = document.createRange();
-      range.selectNodeContents(ed);
-      sel.removeAllRanges();
-      sel.addRange(range);
-      inserted = document.execCommand("insertText", false, text);
+      if (sel) { // getSelection 在極端情境（失焦、特殊 context）可能回 null，防禦性檢查
+        const range = document.createRange();
+        range.selectNodeContents(ed);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        inserted = document.execCommand("insertText", false, text);
+      }
     } catch (e) {
       inserted = false;
     }
