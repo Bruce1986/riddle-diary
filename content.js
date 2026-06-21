@@ -235,13 +235,25 @@
     // 「窺視」：按住可看底層 Claude，放開即恢復。
     // 放開事件必須掛在 window —— overlay 被設成 visibility:hidden 後，按鈕本身收不到 pointerup。
     const peek = overlay.querySelector("#rd-peek");
+    const peekShow = () => (overlay.style.visibility = "hidden");
+    const peekRestore = () => (overlay.style.visibility = "visible");
     peek.addEventListener("pointerdown", (e) => {
       e.preventDefault();
-      overlay.style.visibility = "hidden";
-      const restore = () => (overlay.style.visibility = "visible");
-      window.addEventListener("pointerup", restore, { once: true });
-      window.addEventListener("pointercancel", restore, { once: true });
+      peekShow();
+      window.addEventListener("pointerup", peekRestore, { once: true });
+      window.addEventListener("pointercancel", peekRestore, { once: true });
     });
+    // 鍵盤／螢幕閱讀器：按住 Space/Enter 看一眼，放開或失焦即恢復
+    peek.addEventListener("keydown", (e) => {
+      if (e.key === " " || e.key === "Enter") {
+        e.preventDefault(); // 避免 Space 捲動頁面、Enter 觸發 click
+        peekShow();
+      }
+    });
+    peek.addEventListener("keyup", (e) => {
+      if (e.key === " " || e.key === "Enter") peekRestore();
+    });
+    peek.addEventListener("blur", peekRestore); // 按住時 Tab 離開仍能恢復
 
     // 書籤 ↔ 歷史面板
     const bookmark = overlay.querySelector("#rd-bookmark");
@@ -429,9 +441,10 @@
     if (!node) return "";
     const clone = node.cloneNode(true);
     clone.querySelectorAll(SELECTORS.noise).forEach((el) => el.remove());
-    // innerText 在「未掛載節點」會退化為 textContent（丟失段落換行）；掛到隱藏容器再讀。
-    // 重複使用同一個離畫面 visibility:hidden 容器（非 display:none，否則 innerText 會是空字串），
-    // 避免每次建立/移除造成額外重排。
+    // innerText 在「未掛載節點」會退化為 textContent（丟失段落換行）；掛到離畫面容器再讀。
+    // 容器靠 position:absolute;left:-99999px 移出畫面即可，「不可」用 display:none
+    // （innerText 會變空字串）；也刻意不加 visibility:hidden——Blink 對 visibility:hidden
+    // 元素呼叫 innerText 同樣可能回空字串，會破壞整個訊息擷取。重複使用同一容器避免重排。
     if (!rdTextHolder || !rdTextHolder.isConnected) {
       // 用固定 id 復用，避免擴充重載後新舊腳本各建一個、殘留 DOM 節點
       rdTextHolder = document.getElementById("rd-text-holder");
@@ -439,7 +452,7 @@
         rdTextHolder = document.createElement("div");
         rdTextHolder.id = "rd-text-holder";
         rdTextHolder.style.cssText =
-          "position:absolute;left:-99999px;top:0;width:640px;visibility:hidden;white-space:pre-wrap;";
+          "position:absolute;left:-99999px;top:0;width:640px;white-space:pre-wrap;";
         document.documentElement.appendChild(rdTextHolder);
       }
     }
@@ -500,6 +513,7 @@
     if (!ed) {
       ink("（紙頁無法與底下的墨池相連…請確認頁面已開啟一個對話）", "rd-diary", () => {
         busy = false;
+        queued.length = 0; // 編輯器消失＝頁面已斷線，清掉佇列避免殘留訊息日後亂序送出
       });
       return false;
     }
