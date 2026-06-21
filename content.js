@@ -41,7 +41,7 @@
   let activeResponseTimer = null; // watchResponse 的輪詢
   let introPoll = null; // startIntro 的訊息輪詢
   let reloadTimer = null; // SPA 換頁後延遲重載
-  let rdTextHolder = null; // cleanText 重複使用的離畫面隱藏容器（避免每次建立/移除）
+  let rdTextHolder = null; // cleanText 重複使用的離畫面容器（已移除 visibility:hidden，避免 innerText 變空）
 
   // 只在「對話相關」頁面顯示日記，避免蓋住登入頁、設定頁等
   function onOverlayPath() {
@@ -503,8 +503,11 @@
     const prev = latestResponseText();
     if (sendToClaude(toSend)) {
       watchResponse(baseline, prev);
-    } else if (pen) {
-      pen.placeholder = PEN_PLACEHOLDER; // 送出失敗：還原提示，別卡在「回覆中」
+    } else {
+      // 送出失敗：重置 busy 並清掉佇列（否則排隊中的訊息會永遠卡住），還原提示
+      busy = false;
+      queued.length = 0;
+      if (pen) pen.placeholder = PEN_PLACEHOLDER;
     }
   }
 
