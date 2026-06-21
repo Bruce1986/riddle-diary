@@ -39,12 +39,19 @@ describe("平台 schema 完整性（動態走訪所有已註冊平台）", () =>
         assert.ok(platform.siteName.length > 0);
       });
 
-      it("domains 是非空字串陣列", () => {
+      it("domains 是非空字串陣列且為標準 apex 網域格式", () => {
         assert.ok(Array.isArray(platform.domains));
         assert.ok(platform.domains.length > 0);
         for (const d of platform.domains) {
           assert.strictEqual(typeof d, "string");
           assert.ok(d.length > 0);
+          // 標準網域：不得含前導點（.claude.ai）或萬用字元（*.claude.ai），
+          // 否則 registry 的 endsWith("." + domain) 比對會失效
+          assert.match(
+            d,
+            /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i,
+            `domain '${d}' 應為標準網域格式（如 'claude.ai'），不含前導點或萬用字元`
+          );
         }
       });
 
