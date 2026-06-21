@@ -62,8 +62,9 @@ export default [
           ignoreRestSiblings: true,
         },
       ],
-      // content.js 的 cleanText 函式裡 / /g 含有刻意的 U+00A0 NBSP（把 NBSP 替換成一般空格），是業務邏輯，不得改
-      "no-irregular-whitespace": "off",
+      // content.js 的 cleanText 函式裡 / /g 含有刻意的 U+00A0 NBSP（把 NBSP 替換成一般空格），是業務邏輯。
+      // 用 skipRegExps 只放行 regex 內的 NBSP，其餘位置（變數名、運算子間等）仍會抓出意外的異常空白。
+      "no-irregular-whitespace": ["error", { skipRegExps: true }],
     },
   },
 
