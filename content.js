@@ -12,6 +12,8 @@
       : null;
   // 非已知平台、或平台設定不完整（缺必要選擇器/路徑判斷）→ 不啟用覆蓋層，
   // 避免後續存取缺漏屬性而丟 TypeError 讓 content script 崩潰。
+  // 註：各平台 selectors 的「每個必要鍵都存在且為非空字串」由 tests 的 schema 測試
+  //     在 CI 對所有已註冊平台強制把關，故此處只做物件層級檢查，不在 runtime 重複那份鍵清單。
   if (
     !PLATFORM ||
     typeof PLATFORM.selectors !== "object" ||

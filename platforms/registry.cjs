@@ -20,7 +20,7 @@
       if (!Array.isArray(domains)) continue;
       for (const d of domains) {
         if (typeof d !== "string" || d.trim() === "") continue; // 跳過空字串/純空白，避免 endsWith(".") 誤配
-        const normalizedDomain = d.toLowerCase();
+        const normalizedDomain = d.trim().toLowerCase(); // 一併 trim：容忍設定誤植首尾空白（如 "claude.ai "）
         // 完全相等或子網域（用 "." + domain 結尾比對，避免 evilclaude.ai 之類誤判）。
         // 子網域比對純屬防禦性：manifest 刻意維持 apex-only（https://claude.ai/*），
         // 因為 www.claude.ai 等子網域實測 301 導回 apex、不獨立服務，毋須擴大 host 權限。
