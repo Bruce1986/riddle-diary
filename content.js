@@ -356,7 +356,7 @@
     const feed = overlay.querySelector("#rd-feed");
     feed.innerHTML = "";
     const frag = document.createDocumentFragment();
-    nodes.forEach((node) => {
+    outermost(nodes).forEach((node) => { // 去巢狀，避免容器+子元素重複渲染
       const isUser = node.matches(SELECTORS.userMsg);
       const text = cleanText(node);
       if (!text) return;
@@ -490,8 +490,16 @@
   // 取得目前所有「助理回覆」節點。
   // 用聯集 querySelectorAll：它以「文件順序」回傳且自動去重，因此 nodes[last]
   // 必為頁面最後一則助理訊息（含串流中的那則），不會被選擇器先後順序誤導。
+  // 從節點集合濾掉「被集合內其他節點包含」的內層節點。
+  // 因為 SELECTORS.response 的多個選擇器可能同時命中容器與其子元素（querySelectorAll
+  // 只會去除「完全相同」的節點，不會去除巢狀），不過濾會造成同一則訊息被算兩次／渲染兩次。
+  function outermost(nodeList) {
+    const arr = Array.from(nodeList);
+    return arr.filter((n) => !arr.some((m) => m !== n && m.contains(n)));
+  }
+
   function responseNodes() {
-    return document.querySelectorAll(SELECTORS.response);
+    return outermost(document.querySelectorAll(SELECTORS.response));
   }
 
   // 擷取節點的乾淨內文：剔除無障礙標籤、按鈕、思考區塊
@@ -573,10 +581,9 @@
   function sendToClaude(text) {
     const ed = document.querySelector(SELECTORS.editor);
     if (!ed) {
-      ink("（紙頁無法與底下的墨池相連…請確認頁面已開啟一個對話）", "rd-diary", () => {
-        busy = false;
-        queued.length = 0; // 編輯器消失＝頁面已斷線，清掉佇列避免殘留訊息日後亂序送出
-      });
+      ink("（紙頁無法與底下的墨池相連…請確認頁面已開啟一個對話）", "rd-diary");
+      // busy / 佇列的重置一律交給呼叫端 startTurn 同步處理，避免「非同步 callback 設 busy」
+      // 與「同步設 busy」互相競態（例如失敗 callback 晚一步把新一輪的 busy 清掉）。
       return false;
     }
     ed.focus();
