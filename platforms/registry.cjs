@@ -21,7 +21,9 @@
       for (const d of domains) {
         if (typeof d !== "string") continue;
         const normalizedDomain = d.toLowerCase();
-        // 完全相等或子網域（用 "." + domain 結尾比對，避免 evilclaude.ai 之類誤判）
+        // 完全相等或子網域（用 "." + domain 結尾比對，避免 evilclaude.ai 之類誤判）。
+        // 子網域比對純屬防禦性：manifest 刻意維持 apex-only（https://claude.ai/*），
+        // 因為 www.claude.ai 等子網域實測 301 導回 apex、不獨立服務，毋須擴大 host 權限。
         if (
           normalizedHostname === normalizedDomain ||
           normalizedHostname.endsWith("." + normalizedDomain)

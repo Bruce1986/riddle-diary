@@ -36,11 +36,12 @@
       historyItemFallback: 'a[href^="/chat/"]', // 側邊欄抓不到時，退而求其次全頁搜尋
     },
 
-    // 只在「對話相關」頁面顯示日記，避免蓋住登入頁、設定頁等
+    // 只在「對話相關」頁面顯示日記，避免蓋住登入頁、設定頁等。
+    // new/recents 加結束錨點 \/?$，避免誤判 /news、/new-feature、/recents-activity 等路徑。
     isOverlayPath: function (pathname) {
       return (
         pathname === "/" ||
-        /^\/(chat\/|project\/|new|recents)/.test(pathname)
+        /^\/(chat\/|project\/|new\/?$|recents\/?$)/.test(pathname)
       );
     },
 

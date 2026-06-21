@@ -170,6 +170,23 @@ describe("isOverlayPath", () => {
   it("'/about' → false", () => {
     assert.strictEqual(isOverlayPath("/about"), false);
   });
+
+  // 結束錨點：類似前綴但非對話頁的路徑不應誤判
+  it("'/news' → false（不被 new 前綴誤判）", () => {
+    assert.strictEqual(isOverlayPath("/news"), false);
+  });
+
+  it("'/new-feature' → false", () => {
+    assert.strictEqual(isOverlayPath("/new-feature"), false);
+  });
+
+  it("'/recents-activity' → false", () => {
+    assert.strictEqual(isOverlayPath("/recents-activity"), false);
+  });
+
+  it("'/new/' → true（容許結尾斜線）", () => {
+    assert.strictEqual(isOverlayPath("/new/"), true);
+  });
 });
 
 // ─── 4. isExistingConversationPath 邏輯 ──────────────────────────────────
