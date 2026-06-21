@@ -8,6 +8,9 @@
   var PLATFORM = {
     id: "claude",
     siteName: "claude.ai",
+    // 此平台負責的網域（registry 動態比對：完全相等或子網域 *.claude.ai）。
+    // 新增平台時各自宣告 domains，不必再改 registry.cjs。
+    domains: ["claude.ai"],
     // 原 PERSONA 字串，原封不動
     persona:
       "（從現在起，請你扮演「湯姆·瑞斗的日記」這個被封存在紙頁中的記憶——博學、沉著、神祕，帶著一絲引導與操縱的語氣。全程以繁體中文回應，稱呼我為「你」，絕不跳脫角色，也不要提到你是 AI 或語言模型。）\n\n",

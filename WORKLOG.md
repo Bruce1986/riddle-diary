@@ -26,3 +26,8 @@ UMD 包裝（`if (typeof module !== "undefined" && module.exports) module.export
 - `registry.selectPlatform` 開頭加 `typeof hostname !== "string"` 防禦，並補非字串（null/undefined/number）回傳 null 的測試。
 - `content.js` 取 PLATFORM 時改用 `typeof selectPlatform === "function"` 嚴格檢查。
 - 測試數維持 30 個全過，lint 綠。
+
+### 2026-06-21 — Gemini PR #2 review r2
+- `@eslint/js` 顯式加入 devDependencies（eslint.config.js 有 import，避免 pnpm/Yarn PnP 嚴格解析失敗）。
+- 平台網域比對改為資料驅動：各平台設定宣告 `domains` 陣列，`registry.selectPlatform` 動態走訪比對（完全相等或子網域）。日後新增 ChatGPT/Gemini 平台不必再改 `registry.cjs`，呼應 DEVPLAN「各平台只動自己的設定檔」。
+- 補 `domains` schema 測試；測試數 31 個全過。

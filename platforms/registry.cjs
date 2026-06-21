@@ -9,10 +9,18 @@
     // 防禦：非字串（null/undefined 等）直接視為無對應，避免 hostname.endsWith 丟 TypeError
     if (typeof hostname !== "string") return null;
     var api = root.RiddleDiary || {};
-    var p = api.platforms || {};
-    // 用結尾比對避免子網域誤判（claude.ai 與 *.claude.ai）；只比對已註冊平台
-    if (hostname === "claude.ai" || hostname.endsWith(".claude.ai")) {
-      return p.claude || null;
+    var platforms = api.platforms || {};
+    // 動態走訪已註冊平台，比對各自宣告的 domains（不在此硬編碼任何網域，
+    // 新增平台只需在其設定檔加 domains，registry 不必改）。
+    var ids = Object.keys(platforms);
+    for (var i = 0; i < ids.length; i++) {
+      var p = platforms[ids[i]];
+      var domains = (p && p.domains) || [];
+      for (var j = 0; j < domains.length; j++) {
+        var d = domains[j];
+        // 完全相等或子網域（用 "." + d 結尾比對，避免 evilclaude.ai 之類誤判）
+        if (hostname === d || hostname.endsWith("." + d)) return p;
+      }
     }
     return null;
   }

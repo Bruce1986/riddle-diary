@@ -28,6 +28,13 @@ describe("platforms/claude.cjs schema", () => {
     assert.ok(claudePlatform.siteName.length > 0);
   });
 
+  it("domains 是非空字串陣列且含 claude.ai", () => {
+    assert.ok(Array.isArray(claudePlatform.domains));
+    assert.ok(claudePlatform.domains.length > 0);
+    assert.strictEqual(typeof claudePlatform.domains[0], "string");
+    assert.ok(claudePlatform.domains.includes("claude.ai"));
+  });
+
   it("persona 是非空字串", () => {
     assert.strictEqual(typeof claudePlatform.persona, "string");
     assert.ok(claudePlatform.persona.length > 0);
