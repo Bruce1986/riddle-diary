@@ -57,6 +57,7 @@
 #rd-feed::-webkit-scrollbar { width: 6px; }
 #rd-feed::-webkit-scrollbar-thumb { background: #b9a37388; border-radius: 4px; }
 
+.rd-line { white-space: pre-wrap; } /* 保留 cleanText 取得的換行與空格，避免多段落/列表被合併成一行 */
 .rd-line span { opacity: 0; transition: opacity .5s ease; }
 .rd-line.rd-diary { color: #2a1206; padding-left: 26px; text-shadow: 0 0 1px rgba(42,18,6,.25); }
 .rd-line.rd-me { color: #3a3a8c; text-align: right; }
