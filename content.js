@@ -305,6 +305,8 @@
       peekShow();
       window.addEventListener("pointerup", peekRestore, { once: true });
       window.addEventListener("pointercancel", peekRestore, { once: true });
+      // 視窗失焦（切分頁/alt-tab，或在視窗外放開滑鼠）時 pointerup 可能不在 window 觸發 → 一併還原，避免永久隱藏
+      window.addEventListener("blur", peekRestore, { once: true });
     });
     // 鍵盤／螢幕閱讀器：按住 Space/Enter 看一眼，放開或失焦即恢復
     peek.addEventListener("keydown", (e) => {
@@ -512,7 +514,8 @@
     const feed = overlay.querySelector("#rd-feed");
     const line = document.createElement("div");
     line.className = "rd-line " + cls;
-    for (const ch of text) {
+    const str = String(text || ""); // 防禦：text 萬一非字串/可迭代，避免 for...of 拋 TypeError
+    for (const ch of str) {
       const s = document.createElement("span");
       s.textContent = ch;
       line.appendChild(s);
@@ -535,7 +538,7 @@
       } else {
         // 動畫結束後把上百個帶 transition 的 span 合併回純文字，釋放 DOM／記憶體，
         // 避免長對話累積數千個節點造成捲動與後續渲染卡頓（已淡入完成，視覺不變）。
-        setTimeout(() => { if (line.isConnected) line.textContent = text; }, 500);
+        setTimeout(() => { if (line.isConnected) line.textContent = str; }, 500);
         if (done) setTimeout(done, 400);
       }
     })();
