@@ -112,6 +112,12 @@ describe("registry.selectPlatform", () => {
     assert.strictEqual(result.id, "claude");
   });
 
+  it("尾隨點 'claude.ai.' (FQDN) → 移除尾隨點後回傳 claude 設定物件", () => {
+    const result = selectPlatform("claude.ai.");
+    assert.ok(result !== null);
+    assert.strictEqual(result.id, "claude");
+  });
+
   it("'chatgpt.com' → 回傳 null", () => {
     assert.strictEqual(selectPlatform("chatgpt.com"), null);
   });
