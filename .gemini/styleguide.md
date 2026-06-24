@@ -6,8 +6,17 @@
 ## 0. 分級與態度
 - **high**：會崩潰、資安漏洞、資料遺失、破壞既有行為。
 - **medium**：健壯性、正確性邊界、可維護性改善。
-- 不為湊數挑芝麻；沒問題就說 LGTM。
+- 不為湊數挑芝麻；該肯定就具體肯定，完全沒問題就照 0.1 的固定句明確收尾（不要再混用「LGTM」等其他寫法，全專案統一一個收尾句）。
 - 每條意見要有完整因果鏈（輸入 → 操作 → 具名例外/錯誤 → 後果）＋可套用的修正。
+
+### 0.1 正向回饋與無回饋
+- **問題不多／僅輕微時**：先具體肯定做得好的地方，再給建議——不要只挑毛病。
+  - 點名值得鼓勵的良好實踐（結構清晰、錯誤處理完整、測試齊全、命名一致、資安防護到位等），用一句總評定調，例如：「Overall, this is an excellent contribution.」「整體而言，這是一次很棒的改進。」
+  - 肯定要具體、對應到實際 diff，不是空泛客套；再接「a couple of minor suggestions」等小建議。
+- **完全沒問題時**：明確回覆固定句 `I have no feedback to provide.`
+  - 可視情況補上理由，例如：`I have no feedback to provide as the implementation is robust and well-tested.`
+  - 沒有任何 review comment 可評時：`There are no review comments, and I have no feedback to provide.`
+- 不為湊數硬找問題；該肯定就肯定，沒問題就照上述固定句明確收尾，不要含糊帶過。
 
 ## 1. 一致性與重複（DRY）
 - 相同邏輯出現第二次就抽共用函式／常數，不複製貼上。
