@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!--
+    墨水日記 · Ink Diary — Extension Icon (source, 128×128)
+    V4 Tangerine "Ink" — gold cursive on deep-brown leather with gold frame + corner diamonds.
+
+    CANONICAL RASTERIZATION (icon-128.png):
+      magick -size 128x128 \
+        radial-gradient:"#3a2215-#130b04" \
+        -fill none \
+        -stroke "#1a0e06" -strokewidth 3 \
+        -draw "roundrectangle 3,3,125,125,5,5" \
+        -stroke "#c9a961" -strokewidth 1.5 \
+        -draw "roundrectangle 4,4,124,124,5,5" \
+        -stroke "#c9a961" -strokewidth 1.2 \
+        -draw "rectangle 12,12,116,116" \
+        -stroke "#9a7820" -strokewidth 0.7 \
+        -draw "rectangle 16,16,112,112" \
+        -fill "#c9a961" -stroke none \
+        -draw "polygon 12,8 16,12 12,16 8,12" \
+        -draw "polygon 116,8 120,12 116,16 112,12" \
+        -draw "polygon 12,112 16,116 12,120 8,116" \
+        -draw "polygon 116,112 120,116 116,120 112,116" \
+        -font "fonts/Tangerine-700.ttf" \
+        -pointsize 72 -kerning 4 -gravity center \
+        -fill "#00000070" -annotate 0x0+1+2 "Ink" \
+        -fill "#d4af37" -stroke "#9a7820" -strokewidth 0.6 -annotate 0 "Ink" \
+        icons/icon-128.png
+
+    Note: SVG text below uses Tangerine via @font-face for browsers/editors.
+    The rasterized PNG is authoritative for Chrome Web Store submission.
+    Font: fonts/Tangerine-700.ttf (bundled in project).
+    Mixed-case "Ink" is intentional — Tangerine's sweeping lowercase is the design.
+  -->
+  <defs>
+    <style>
+      @font-face {
+        font-family: 'Tangerine';
+        src: url('../fonts/Tangerine-700.ttf') format('truetype');
+        font-weight: 700;
+      }
+    </style>
+
+    <!-- Dark leather: centre slightly lighter, edges almost black -->
+    <radialGradient id="leather" cx="50%" cy="50%" r="70%" fx="50%" fy="50%">
+      <stop offset="0%"   stop-color="#3a2215"/>
+      <stop offset="70%"  stop-color="#231409"/>
+      <stop offset="100%" stop-color="#130b04"/>
+    </radialGradient>
+
+    <!-- Gold gradient: top-lit, gives embossed feel -->
+    <linearGradient id="gold" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#e8cc7a"/>
+      <stop offset="45%"  stop-color="#d4af37"/>
+      <stop offset="100%" stop-color="#9a7820"/>
+    </linearGradient>
+
+    <filter id="textShadow">
+      <feDropShadow dx="1" dy="2" stdDeviation="1.5"
+                    flood-color="#000" flood-opacity="0.44"/>
+    </filter>
+  </defs>
+
+  <!-- Leather body -->
+  <rect x="0" y="0" width="128" height="128" fill="url(#leather)"/>
+
+  <!-- Outer bevel: dark ring then gold hairline -->
+  <rect x="3" y="3" width="122" height="122" rx="5" ry="5"
+        fill="none" stroke="#1a0e06" stroke-width="3"/>
+  <rect x="4" y="4" width="120" height="120" rx="5" ry="5"
+        fill="none" stroke="#c9a961" stroke-width="1.5" opacity="0.9"/>
+
+  <!-- Inner frame -->
+  <rect x="12" y="12" width="104" height="104"
+        fill="none" stroke="#c9a961" stroke-width="1.2" opacity="0.8"/>
+
+  <!-- Inner double-rule -->
+  <rect x="16" y="16" width="96" height="96"
+        fill="none" stroke="#9a7820" stroke-width="0.7" opacity="0.6"/>
+
+  <!-- Corner ornaments: small gold diamonds at inner frame corners -->
+  <polygon points="12,8 16,12 12,16 8,12"   fill="#c9a961"/>
+  <polygon points="116,8 120,12 116,16 112,12" fill="#c9a961"/>
+  <polygon points="12,112 16,116 12,120 8,116" fill="#c9a961"/>
+  <polygon points="116,112 120,116 116,120 112,116" fill="#c9a961"/>
+
+  <!-- "Ink" lettering — Tangerine 700, 72pt equivalent, gold with shadow -->
+  <text x="65" y="82"
+        text-anchor="middle"
+        font-family="'Tangerine', cursive"
+        font-weight="700"
+        font-size="72"
+        letter-spacing="4"
+        fill="url(#gold)"
+        filter="url(#textShadow)">Ink</text>
+</svg>

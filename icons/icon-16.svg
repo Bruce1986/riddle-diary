@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <!--
+    墨水日記 · Ink Diary — Extension Icon (16×16 source)
+    V4 fallback: gold ink drop silhouette on dark leather.
+    At 16px, Tangerine's hairline curves collapse; ink drop preserves the "written in ink" theme.
+
+    CANONICAL RASTERIZATION (icon-16.png):
+      magick -size 16x16 \
+        radial-gradient:"#3a2215-#130b04" \
+        -fill "#d4af37" -stroke none \
+        -draw "circle 8,6 8,10" \
+        -draw "polygon 4,7 8,15 12,7" \
+        icons/icon-16.png
+  -->
+  <defs>
+    <radialGradient id="leather16" cx="50%" cy="50%" r="70%">
+      <stop offset="0%"   stop-color="#3a2215"/>
+      <stop offset="100%" stop-color="#130b04"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Leather background -->
+  <rect x="0" y="0" width="16" height="16" fill="url(#leather16)"/>
+
+  <!-- Gold ink drop: teardrop pointing down (circle body + triangle tip) -->
+  <circle cx="8" cy="6" r="4" fill="#d4af37"/>
+  <polygon points="4,7 8,15 12,7" fill="#d4af37"/>
+</svg>

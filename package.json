@@ -1,9 +1,9 @@
 {
   "name": "riddle-diary",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
-  "description": "把 Claude 的聊天介面偽裝成湯姆·瑞斗的魔法日記",
+  "description": "把 AI 聊天介面化為一本神秘的墨水日記",
   "scripts": {
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

@@ -11,3 +11,9 @@ node_modules/
 # OS / misc
 Thumbs.db
 *.log
+
+# Claude Code session artifacts (worktrees, transcripts)
+.claude/
+
+# Build artifacts
+*.zip

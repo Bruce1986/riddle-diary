@@ -19,14 +19,49 @@
       }
       input[type="checkbox"] { width: 15px; height: 15px; accent-color: #6b1d12; }
       .hint { font-size: 11px; color: #8a7a52; margin-top: 10px; line-height: 1.5; }
+
+      /* ── 語言選擇器 ─────────────────────────────────────────────── */
+      fieldset.rd-lang {
+        border: 1px solid #c8b88a;
+        border-radius: 5px;
+        margin: 12px 0 0;
+        padding: 6px 10px 8px;
+        background: #f0e8d0;
+      }
+      fieldset.rd-lang legend {
+        font-size: 11px;
+        color: #6b4c26;
+        padding: 0 4px;
+        font-weight: 600;
+      }
+      fieldset.rd-lang label {
+        padding: 4px 0;
+        font-size: 12px;
+        gap: 6px;
+      }
+      fieldset.rd-lang input[type="radio"] {
+        accent-color: #6b1d12;
+        width: 13px;
+        height: 13px;
+      }
     </style>
   </head>
   <body>
-    <h1>湯姆瑞斗的日記本</h1>
-    <p class="sub">在 claude.ai 上開啟。</p>
-    <label><input type="checkbox" id="enabled" /> 開啟日記偽裝</label>
-    <label><input type="checkbox" id="persona" /> 啟用湯姆·瑞斗人設</label>
-    <p class="hint">提示：日記畫面中長按右上「窺視」可暫時看一眼底下的 Claude。</p>
+    <h1 data-i18n="popup_h1">墨水日記 · Ink Diary</h1>
+    <p class="sub" data-i18n="popup_sub">在 Claude / ChatGPT / Gemini 上開啟。</p>
+    <label><input type="checkbox" id="enabled" /> <span data-i18n="popup_disguise_label">開啟日記偽裝</span></label>
+    <label><input type="checkbox" id="persona" /> <span data-i18n="popup_persona_label">啟用魔法日記人設</span></label>
+
+    <fieldset class="rd-lang">
+      <legend data-i18n="popup_language_label">語言 / Language</legend>
+      <label><input type="radio" name="language" value="auto"> <span data-i18n="popup_lang_auto">自動</span></label>
+      <label><input type="radio" name="language" value="zh_TW"> <span data-i18n="popup_lang_zh_tw">繁體中文</span></label>
+      <label><input type="radio" name="language" value="en"> <span data-i18n="popup_lang_en">English</span></label>
+    </fieldset>
+
+    <p class="hint" data-i18n="popup_hint">提示：日記畫面中長按右上「窺視」可暫時看一眼底下的 AI 介面。</p>
+    <script src="i18n/messages.cjs"></script>
+    <script src="i18n/i18n.cjs"></script>
     <script src="popup.js"></script>
   </body>
 </html>

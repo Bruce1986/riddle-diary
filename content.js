@@ -1,10 +1,12 @@
-// 湯姆瑞斗的日記本 — content script
-// 在 claude.ai 上蓋一層日記介面，並橋接到底層真正的 Claude 對話。
+// 墨水日記 · Ink Diary — content script
+// 在支援的 AI 對話平台（Claude / ChatGPT / Gemini）上蓋一層日記介面，並橋接到底層真正的對話。
 (function () {
   "use strict";
 
-  // ── 平台設定（由 platforms/registry.cjs + platforms/claude.cjs 在本腳本前載入） ──
-  // manifest content_scripts.js 載入順序：registry.cjs → claude.cjs → content.js
+  // ── 平台設定（由 platforms/registry.cjs + 各平台檔在本腳本前載入） ──
+  // ── i18n（由 i18n/messages.cjs + i18n/i18n.cjs 在本腳本前載入） ──
+  // manifest content_scripts.js 載入順序：
+  //   registry.cjs → platforms/claude.cjs → platforms/chatgpt.cjs → platforms/gemini.cjs → i18n/messages.cjs → i18n/i18n.cjs → content.js
   const PLATFORM =
     globalThis.RiddleDiary &&
     typeof globalThis.RiddleDiary.selectPlatform === "function"
@@ -12,8 +14,6 @@
       : null;
   // 非已知平台、或平台設定不完整（缺必要選擇器/路徑判斷）→ 不啟用覆蓋層，
   // 避免後續存取缺漏屬性而丟 TypeError 讓 content script 崩潰。
-  // 註：各平台 selectors 的「每個必要鍵都存在且為非空字串」由 tests 的 schema 測試
-  //     在 CI 對所有已註冊平台強制把關，故此處只做物件層級檢查，不在 runtime 重複那份鍵清單。
   if (
     !PLATFORM ||
     typeof PLATFORM.selectors !== "object" ||
@@ -24,15 +24,47 @@
     return;
   }
 
+  // i18n helper（messages.js + i18n.js 注入後掛在 globalThis.RiddleDiary.i18n）
+  const _i18n = (globalThis.RiddleDiary && globalThis.RiddleDiary.i18n) || null;
+  function t(key) {
+    return _i18n && typeof _i18n.getMessage === "function"
+      ? _i18n.getMessage(key)
+      : key; // fallback：直接顯示 key（測試環境 / i18n 未載入時保底）
+  }
+  // HTML attribute 跳脫（用於 innerHTML template 的 title="..." 等 attribute 上下文）
+  const escAttr = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // HTML text-content 跳脫（用於 innerHTML template 的 >text< 上下文，防禦性寫法）
+  const escText = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // 只接受同源 https 路徑，防止 javascript:/data: 等 sink（用於 window.location.href 賦值）
+  function safeSameOriginPath(raw) {
+    try {
+      const u = new URL(raw, location.origin);
+      if (u.origin === location.origin && u.protocol === "https:") {
+        return u.pathname + u.search + u.hash;
+      }
+    } catch (_e) {
+      /* ignore */
+    }
+    return null;
+  }
+
   // ── 可維護的選擇器 ──────────────────────────────────────────────
-  // claude.ai 改版時，多半只要更新 platforms/claude.cjs 的 selectors 即可。
   const SELECTORS = PLATFORM.selectors;
 
-  const PERSONA = PLATFORM.persona || ""; // 平台未設 persona 時退回空字串，避免 PERSONA + text 拼出 "undefined"
+  // PERSONA：優先使用 personaLocales（雙語物件），沒有則退回 persona 字串。
+  // 實際取用時呼叫 getPersona()，使其依當下語言動態選取。
+  function getPersona() {
+    const locales = PLATFORM.personaLocales;
+    if (locales && typeof locales === "object") {
+      const locale = _i18n && typeof _i18n.getLocale === "function"
+        ? _i18n.getLocale()
+        : "zh_TW";
+      return locales[locale] || locales.zh_TW || PLATFORM.persona || "";
+    }
+    return PLATFORM.persona || "";
+  }
 
-  const PEN_PLACEHOLDER = "在此落筆…（Enter 送出，Shift+Enter 換行）";
-  const PEN_PLACEHOLDER_BUSY = "日記正在回覆中…（可繼續落筆，會依序送出）";
-
+  let bootComplete = false; // boot() 完成後設為 true；防止 storage.onChanged 在初始化前觸發重渲染
   let state = { enabled: true, persona: true };
   let personaSent = false; // 每次載入只在第一則訊息前置人設
   let busy = false;
@@ -43,7 +75,91 @@
   let activeResponseTimer = null; // watchResponse 的輪詢
   let introPoll = null; // startIntro 的訊息輪詢
   let reloadTimer = null; // SPA 換頁後延遲重載
+  let urlWatchId = null; // watchUrlChanges 的輪詢（模組作用域，resetState 可清除）
   let rdTextHolder = null; // cleanText 重複使用的離畫面隱藏容器（避免每次建立/移除）
+
+  // ── [data-i18n] 重新套用機制 ────────────────────────────────────
+  // buildOverlay() 建立的 DOM 元素帶有 data-i18n 屬性，記錄需更新的字串鍵。
+  // applyI18n() 遍歷所有帶有 data-i18n 的元素，重新套用目前語言的字串。
+  function applyI18n() {
+    if (!overlay) return;
+    overlay.querySelectorAll("[data-i18n]").forEach(function (el) {
+      var key = el.getAttribute("data-i18n");
+      var attr = el.getAttribute("data-i18n-attr"); // 特定 attribute（如 aria-label、title、placeholder）
+      if (attr) {
+        el.setAttribute(attr, t(key));
+      } else {
+        el.textContent = t(key);
+      }
+    });
+    // 更新 title tooltips（buildOverlay 時以 data-i18n-title 記錄鍵，語言切換時重新套用）
+    overlay.querySelectorAll("[data-i18n-title]").forEach(function (el) {
+      var key = el.getAttribute("data-i18n-title");
+      var val = t(key);
+      if (val) el.setAttribute("title", val);
+    });
+    // placeholder 由 data-i18n-attr="placeholder" 處理（見 buildOverlay 中的 textarea）
+  }
+
+  // ── 語言變更時的 re-render ──────────────────────────────────────
+  // storage.onChanged 偵測到 language 變更 → 更新內部 locale → 重新套用 UI 字串。
+  // 注意：正在動畫浮現的墨痕（ink()）不回頭改；只更新靜態 DOM 元素（按鈕、提示等）。
+  try {
+    chrome.storage.onChanged.addListener(function (changes, area) {
+      if (area !== "sync") return;
+      // ── 既有的 rd_enabled / rd_persona 監聽 ──
+      // boot() 未完成前不觸發 UI 動作（避免 initLocale 未 resolve、overlay 未建）；但仍要繼續往下處理
+      // 同一批可能捎帶的 rd_persona / language 變更，避免整批被吞掉。
+      if (changes.rd_enabled) {
+        state.enabled = changes.rd_enabled.newValue;
+        if (bootComplete) {
+          if (state.enabled) {
+            if (!overlay) {
+              if (onOverlayPath()) buildOverlay();
+            } else {
+              overlay.classList.remove("rd-hidden");
+              lastUrl = location.href;
+              resetState();
+              const feed = overlay.querySelector("#rd-feed");
+              if (feed) feed.innerHTML = "";
+              startIntro();
+              watchUrlChanges(); // resetState 清了 urlWatchId，必須重啟才能繼續偵測 SPA 換頁
+            }
+          } else if (overlay) {
+            overlay.classList.add("rd-hidden");
+            resetState();
+          }
+        }
+      }
+      if (changes.rd_persona) state.persona = changes.rd_persona.newValue;
+
+      // ── 語言偏好變更 ──
+      // 需等 boot() 完成（initLocale 已 resolve），否則 setLocale 會被 initLocale 完成時的回呼覆寫。
+      if (changes.language && _i18n && bootComplete) {
+        var uiLang = "";
+        try {
+          uiLang =
+            typeof chrome.i18n !== "undefined" &&
+            typeof chrome.i18n.getUILanguage === "function"
+              ? chrome.i18n.getUILanguage()
+              : (navigator && navigator.language) || "";
+        } catch (e) {
+          uiLang = (navigator && navigator.language) || "";
+        }
+        if (typeof _i18n.setLocale === "function" && typeof _i18n.resolveLocale === "function") {
+          _i18n.setLocale(_i18n.resolveLocale(changes.language.newValue, uiLang));
+        }
+        applyI18n();
+        // pen placeholder 需單獨更新（因為它不是 textContent，而是 placeholder 屬性）
+        const pen = overlay && overlay.querySelector("#rd-pen");
+        if (pen) {
+          pen.placeholder = busy ? t("pen_placeholder_busy") : t("pen_placeholder");
+        }
+      }
+    });
+  } catch (e) {
+    /* context 失效，略過監聽 */
+  }
 
   // 只在「對話相關」頁面顯示日記，避免蓋住登入頁、設定頁等
   function onOverlayPath() {
@@ -51,7 +167,7 @@
   }
 
   // 兩個字型都打包在擴充內，以 chrome-extension:// URL 注入 @font-face，完全不對外連線，
-  // 也繞過 claude.ai 的 CSP（其 font-src 白名單不含外部 CDN）。
+  // 也繞過各 AI 平台的 CSP `font-src` 限制（白名單多半不含外部 CDN）。
   function injectFonts() {
     if (fontsInjected) return;
     let cn, en;
@@ -95,39 +211,21 @@
     }
   }
 
-  // ── 啟動 ────────────────────────────────────────────────────────
-  safeStorageGet({ rd_enabled: true, rd_persona: true }, (cfg) => {
-    state.enabled = cfg.rd_enabled;
-    state.persona = cfg.rd_persona;
-    if (state.enabled && onOverlayPath()) buildOverlay();
-  });
-
-  try {
-    chrome.storage.onChanged.addListener((changes) => {
-      if (changes.rd_enabled) {
-        state.enabled = changes.rd_enabled.newValue;
-        if (state.enabled) {
-          if (!overlay) {
-            if (onOverlayPath()) buildOverlay();
-          } else {
-            overlay.classList.remove("rd-hidden");
-            // 重新啟用時主動同步：清狀態、清空、重載目前對話
-            // （涵蓋「日記隱藏期間切換過對話」的邊界）
-            lastUrl = location.href;
-            resetState();
-            const feed = overlay.querySelector("#rd-feed");
-            if (feed) feed.innerHTML = "";
-            startIntro();
-          }
-        } else if (overlay) {
-          overlay.classList.add("rd-hidden");
-          resetState(); // 停用時清掉背景計時器
-        }
-      }
-      if (changes.rd_persona) state.persona = changes.rd_persona.newValue;
+  // ── 啟動：先初始化語言，再讀其餘設定 ────────────────────────────
+  function boot() {
+    safeStorageGet({ rd_enabled: true, rd_persona: true }, function (cfg) {
+      state.enabled = cfg.rd_enabled;
+      state.persona = cfg.rd_persona;
+      if (state.enabled && onOverlayPath()) buildOverlay();
+      bootComplete = true; // 初始化完成，允許 storage.onChanged 觸發重渲染
     });
-  } catch (e) {
-    /* context 失效，略過監聽 */
+  }
+
+  // 初始化 locale，然後啟動覆蓋層
+  if (_i18n && typeof _i18n.initLocale === "function") {
+    _i18n.initLocale(function () { boot(); });
+  } else {
+    boot();
   }
 
   // 統一清除所有進行中的計時器並重置狀態（換頁／闔上／停用時呼叫，避免背景計時器空轉）
@@ -135,28 +233,35 @@
     if (activeResponseTimer) { clearInterval(activeResponseTimer); activeResponseTimer = null; }
     if (introPoll) { clearInterval(introPoll); introPoll = null; }
     if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
+    if (urlWatchId) { clearInterval(urlWatchId); urlWatchId = null; }
     busy = false;
     queued.length = 0;
     const pen = overlay && overlay.querySelector("#rd-pen");
-    if (pen) pen.placeholder = PEN_PLACEHOLDER;
+    if (pen) pen.placeholder = t("pen_placeholder");
   }
 
-  // 監看 SPA 換頁：claude.ai 在側邊欄切換對話不會重整頁面，
+  // 監看 SPA 換頁：各 AI 對話平台在側邊欄切換對話多半不會重整頁面，
   // content script 在隔離世界攔不到頁面的 history.pushState，故以輪詢 location.href 偵測。
   let lastUrl = location.href;
   function watchUrlChanges() {
-    const id = setInterval(() => {
-      if (!extValid()) { clearInterval(id); return; } // 擴充重載後舊分頁 context 失效 → 停掉輪詢
+    // 清除舊的輪詢再重新啟動，避免多重呼叫造成並行輪詢
+    if (urlWatchId) { clearInterval(urlWatchId); urlWatchId = null; }
+    urlWatchId = setInterval(() => {
+      if (!extValid()) { clearInterval(urlWatchId); urlWatchId = null; return; } // 擴充重載後舊分頁 context 失效 → 停掉輪詢
       if (location.href === lastUrl) return;
       lastUrl = location.href; // 隨時更新；隱藏時切換對話的重載改由「重新啟用」時主動處理
       if (!overlay || overlay.classList.contains("rd-hidden")) return;
-      // 換對話了 → 統一重置（清計時器/busy/佇列），再重設換頁專屬狀態
+      // 換對話了 → 先明確停掉目前這支 interval（防止 resetState 被呼叫後 ID 已被清空
+      // 但 setInterval 回呼仍持續觸發的競態），再統一重置並重新啟動監聽。
+      clearInterval(urlWatchId);
+      urlWatchId = null;
       resetState();
       personaSent = false; // 新對話要重新前置人設
       overlay.classList.remove("rd-hist-open");
       const feed = overlay.querySelector("#rd-feed");
       if (feed) feed.innerHTML = "";
-      reloadTimer = setTimeout(startIntro, 500); // 給 claude.ai 換上新對話內容的時間
+      reloadTimer = setTimeout(startIntro, 500); // 給 AI 平台換上新對話內容的時間
+      watchUrlChanges(); // 重新啟動 URL 監聽，確保 SPA 後續換頁仍可偵測
     }, 700);
   }
 
@@ -177,34 +282,53 @@
     injectFonts();
     overlay = document.createElement("div");
     overlay.id = "rd-overlay";
+    // 使用 data-i18n 屬性標記需要翻譯的元素，applyI18n() 會遍歷套用。
+    // data-i18n-attr 指定要更新的 attribute（預設更新 textContent）。
     overlay.innerHTML = `
       <div id="rd-book">
-        <div id="rd-bookmark" role="button" tabindex="0" aria-label="翻開左側的歷史篇章" title="翻開左側的歷史篇章"><span>書籤</span></div>
+        <div id="rd-bookmark" role="button" tabindex="0"
+          data-i18n="bookmark_aria" data-i18n-attr="aria-label"
+          data-i18n-title="bookmark_aria"
+          title="${escAttr(t("bookmark_aria"))}">
+          <span data-i18n="bookmark_label">${escText(t("bookmark_label"))}</span>
+        </div>
 
         <aside id="rd-history">
           <div class="rd-hist-head">
-            <span>過往的篇章</span>
-            <button id="rd-hist-close" title="收起">收起 ›</button>
+            <span data-i18n="history_head">${escText(t("history_head"))}</span>
+            <button id="rd-hist-close" data-i18n-title="history_close" title="${escAttr(t("history_close"))}">
+              <span data-i18n="history_close">${escText(t("history_close"))}</span>
+            </button>
           </div>
-          <button id="rd-new" title="翻開全新的一頁">✚ 翻開新的一頁</button>
+          <button id="rd-new" data-i18n-title="open_new_page" title="${escAttr(t("open_new_page"))}">
+            <span data-i18n="open_new_page">${escText(t("open_new_page"))}</span>
+          </button>
           <div class="rd-hist-list"></div>
         </aside>
 
         <div class="rd-corner">
-          <button id="rd-peek" title="暫時看一眼底下的 Claude 介面">窺視</button>
-          <button id="rd-close" title="闔上日記">闔上</button>
+          <button id="rd-peek" data-i18n-title="peek_button" title="${escAttr(t("peek_button"))}">
+            <span data-i18n="peek_button">${escText(t("peek_button"))}</span>
+          </button>
+          <button id="rd-close" data-i18n-title="close_button" title="${escAttr(t("close_button"))}">
+            <span data-i18n="close_button">${escText(t("close_button"))}</span>
+          </button>
         </div>
 
         <div id="rd-feed"></div>
-        <textarea id="rd-pen" rows="1" placeholder="在此落筆…（Enter 送出，Shift+Enter 換行）"></textarea>
-        <div id="rd-caption">羽毛筆 · 墨水會自行滲入紙頁，再由日記回應你</div>
+        <textarea id="rd-pen" rows="1"
+          placeholder="${escAttr(t("pen_placeholder"))}"
+          data-i18n="pen_placeholder" data-i18n-attr="placeholder"></textarea>
+        <div id="rd-caption" data-i18n="caption">${escText(t("caption"))}</div>
 
-        <div id="rd-cover" role="button" tabindex="0" aria-label="輕觸翻開日記">
+        <div id="rd-cover" role="button" tabindex="0"
+          data-i18n="cover_hint" data-i18n-attr="aria-label"
+          aria-label="${escAttr(t("cover_hint"))}">
           <div class="rd-cover-frame">
-            <div class="rd-cover-title">T. M. Riddle</div>
+            <div class="rd-cover-title" data-i18n="cover_title">${escText(t("cover_title"))}</div>
             <div class="rd-cover-rule"></div>
-            <div class="rd-cover-sub">A Diary</div>
-            <div class="rd-cover-hint">輕觸以翻開</div>
+            <div class="rd-cover-sub" data-i18n="cover_sub">${escText(t("cover_sub"))}</div>
+            <div class="rd-cover-hint" data-i18n="cover_hint">${escText(t("cover_hint"))}</div>
           </div>
         </div>
       </div>`;
@@ -247,8 +371,10 @@
     onActivate(bookmark, () => toggleHistory());
     overlay.querySelector("#rd-hist-close").addEventListener("click", () => toggleHistory(false));
     overlay.querySelector("#rd-new").addEventListener("click", () => {
+      // 驗證 platform 提供的 newChatPath 為同源 https 相對路徑，防 javascript:/data: sink
+      const safe = safeSameOriginPath(PLATFORM.newChatPath || "/new") || "/new";
       sessionStorage.setItem("rd_skipcover", "1");
-      window.location.href = "/new";
+      window.location.href = safe;
     });
 
     // 啟動書封：點擊翻開；若剛從歷史切換進來則略過書封
@@ -304,9 +430,7 @@
   }
 
   function showIntroLine(pen) {
-    ink("翻開了一本沒有主人的舊日記，扉頁上緩緩浮現一行字……", "rd-diary", () =>
-      pen && pen.focus()
-    );
+    ink(t("intro_line"), "rd-diary", () => pen && pen.focus());
   }
 
   // 把既有對話的訊息「立即」鋪進日記（不逐字動畫）。用 DocumentFragment 一次掛上，避免逐行重排。
@@ -341,7 +465,9 @@
     let count = 0;
     // 優先從側邊欄／導覽列找對話連結；找不到再退而求其次全頁搜尋
     let anchors = document.querySelectorAll(SELECTORS.historyItem);
-    if (!anchors.length) anchors = document.querySelectorAll(SELECTORS.historyItemFallback);
+    if (!anchors.length && SELECTORS.historyItemFallback) {
+      anchors = document.querySelectorAll(SELECTORS.historyItemFallback);
+    }
     anchors.forEach((a) => {
       const href = a.getAttribute("href");
       if (!href || seen.has(href)) return;
@@ -368,23 +494,34 @@
         // 優先 SPA 軟導航：點擊側邊欄原本的連結，避免整頁重載；
         // watchUrlChanges 會偵測到 URL 改變並把新對話重新鋪進日記。
         // 點擊當下「重新」從 DOM 找最新的同 href 錨點（側邊欄可能已重渲染，舊 a 參照會失效）
-        const live =
-          document.querySelector('a[href="' + href + '"]') ||
-          (a.isConnected ? a : null);
+        let live = null;
+        try {
+          live =
+            document.querySelector('a[href="' + CSS.escape(href) + '"]') ||
+            (a.isConnected ? a : null);
+        } catch (_e) {
+          live = a.isConnected ? a : null;
+        }
         if (live) {
           live.click(); // SPA 軟導航
         } else {
-          // 找不到可用錨點 → 退回 hard reload
-          sessionStorage.setItem("rd_skipcover", "1");
-          window.location.href = href;
+          // 找不到可用錨點 → 退回 hard reload；驗證 href 為同源絕對路徑，
+          // 防止 host 頁面若曾嵌 javascript:/data: 連結被誤導。
+          const safe = safeSameOriginPath(href);
+          if (safe) {
+            sessionStorage.setItem("rd_skipcover", "1");
+            window.location.href = safe;
+          }
         }
       });
       list.appendChild(item);
       count++;
     });
     if (count === 0) {
-      list.innerHTML =
-        '<div class="rd-hist-empty">翻不到更早的篇章——也許側邊欄尚未展開／載入，或這是一段全新的記憶。</div>';
+      const empty = document.createElement("div");
+      empty.className = "rd-hist-empty";
+      empty.textContent = t("history_empty");
+      list.replaceChildren(empty);
     }
   }
 
@@ -417,8 +554,6 @@
   }
 
   // 取得目前所有「助理回覆」節點。
-  // 用聯集 querySelectorAll：它以「文件順序」回傳且自動去重，因此 nodes[last]
-  // 必為頁面最後一則助理訊息（含串流中的那則），不會被選擇器先後順序誤導。
   function responseNodes() {
     return document.querySelectorAll(SELECTORS.response);
   }
@@ -428,11 +563,7 @@
     if (!node) return "";
     const clone = node.cloneNode(true);
     clone.querySelectorAll(SELECTORS.noise).forEach((el) => el.remove());
-    // innerText 在「未掛載節點」會退化為 textContent（丟失段落換行）；掛到隱藏容器再讀。
-    // 重複使用同一個離畫面 visibility:hidden 容器（非 display:none，否則 innerText 會是空字串），
-    // 避免每次建立/移除造成額外重排。
     if (!rdTextHolder || !rdTextHolder.isConnected) {
-      // 用固定 id 復用，避免擴充重載後新舊腳本各建一個、殘留 DOM 節點
       rdTextHolder = document.getElementById("rd-text-holder");
       if (!rdTextHolder) {
         rdTextHolder = document.createElement("div");
@@ -443,12 +574,10 @@
       }
     }
     rdTextHolder.replaceChildren(clone);
-    let t = (clone.innerText || "").replace(/ /g, " ").trim();
-    rdTextHolder.replaceChildren(); // 清空內容但保留容器供下次重用
-    // 去掉開頭可能殘留的無障礙標籤（無障礙複本已由 SELECTORS.noise 的 .sr-only 移除，
-    // 不做「整段去重複」——那會誤砍回覆中合法的重複，如「哈哈 哈哈」、詩句、列表）
-    t = t.replace(/^(Claude\s+(responded|said)|You\s+said)\s*:?\s*/i, "");
-    return t;
+    let text = (clone.innerText || "").replace(/ /g, " ").trim();
+    rdTextHolder.replaceChildren();
+    text = text.replace(/^(Claude|ChatGPT|Gemini|Assistant|Model)\s+(responded|said)\s*:?\s*|^You\s+said\s*:?\s*/i, "");
+    return text;
   }
   function latestResponseText() {
     const nodes = responseNodes();
@@ -459,30 +588,28 @@
   function submit(raw) {
     const pen = overlay.querySelector("#rd-pen");
     const text = (raw || "").trim();
-    pen.value = ""; // 一律先清空（連只輸入空白/換行的情況也清掉）
+    pen.value = "";
     pen.style.height = "auto";
     if (!text) return;
-    // 編輯器不存在時，不進入 busy（否則佇列會卡死）；直接提示後結束。
     if (!document.querySelector(SELECTORS.editor)) {
-      ink("（紙頁無法與底下的墨池相連…請確認頁面已開啟一個對話）", "rd-diary");
+      ink(t("no_editor"), "rd-diary");
       return;
     }
     if (busy) {
-      queued.push(text); // 正在回覆 → 排入佇列（輪到時才繪製，避免與動畫重疊；placeholder 已提示）
+      queued.push(text);
       return;
     }
     startTurn(text);
   }
 
-  // 真正送出一則訊息並監看回覆
   function startTurn(text) {
     busy = true;
     const pen = overlay.querySelector("#rd-pen");
-    if (pen) pen.placeholder = PEN_PLACEHOLDER_BUSY; // 視覺回饋：日記正在回覆
-    ink(text, "rd-me"); // 在此才繪製使用者這句：排隊的訊息等輪到才浮現，不會疊在動畫上
+    if (pen) pen.placeholder = t("pen_placeholder_busy");
+    ink(text, "rd-me");
     let toSend = text;
     if (state.persona && !personaSent) {
-      toSend = PERSONA + text;
+      toSend = getPersona() + text;
       personaSent = true;
     }
     const baseline = responseNodes().length;
@@ -490,21 +617,22 @@
     if (sendToClaude(toSend)) {
       watchResponse(baseline, prev);
     } else if (pen) {
-      pen.placeholder = PEN_PLACEHOLDER; // 送出失敗：還原提示，別卡在「回覆中」
+      pen.placeholder = t("pen_placeholder");
     }
   }
 
   function sendToClaude(text) {
+    // TODO(T4-E): Gemini uses Quill; execCommand("insertText") may or may not work.
+    // LIVE VERIFY before releasing Gemini support.
+    if (PLATFORM.writeStrategy === "quill" && typeof console !== "undefined") {
+      console.warn("[Ink Diary] Gemini uses Quill; write may fail. TODO(T4-E)");
+    }
     const ed = document.querySelector(SELECTORS.editor);
     if (!ed) {
-      ink("（紙頁無法與底下的墨池相連…請確認頁面已開啟一個對話）", "rd-diary", () => {
-        busy = false;
-      });
+      ink(t("no_editor"), "rd-diary", () => { busy = false; });
       return false;
     }
     ed.focus();
-    // 用 execCommand 寫入 contenteditable，可觸發 React 監聽的 input 事件。
-    // 注意：execCommand 失敗時不一定丟例外，常是「回傳 false」——兩種都要視為失敗。
     let inserted = false;
     try {
       document.execCommand("selectAll", false, null);
@@ -513,7 +641,6 @@
       inserted = false;
     }
     if (!inserted) {
-      // 直接設 textContent 會破壞 ProseMirror 內部狀態；改派發 beforeinput，走正常事件流插入
       ed.dispatchEvent(
         new InputEvent("beforeinput", {
           bubbles: true,
@@ -523,8 +650,6 @@
         })
       );
     }
-    // 寫入後，ProseMirror/React 需要極短時間才會啟用送出鈕。用短輪詢（最多 ~500ms）
-    // 等鈕啟用再點，比寫死延遲更穩；都等不到才退回派發 Enter 鍵盤事件（保底）。
     let attempts = 0;
     const trySend = () => {
       const btn = document.querySelector(SELECTORS.sendBtn);
@@ -550,13 +675,9 @@
       );
     };
     setTimeout(trySend, 50);
-    // 回傳 true = 已「嘗試」送出（找得到輸入框）。實際送出在輪詢中非同步進行；
-    // 若送出鈕始終不啟用且 Enter fallback 也沒觸發，watchResponse 會在約 36 秒無回應後
-    // 顯示「沒有回音」並解鎖 —— 刻意的優雅降級，無法從外部即時確認 Claude 是否收到。
     return true;
   }
 
-  // 等 Claude 寫完，再讓乾淨的回覆「一次浮現」（避開串流重排造成的重複）
   function watchResponse(baseline, prev) {
     let ticks = 0;
     let sawStreaming = false;
@@ -564,10 +685,10 @@
     let lastText = "";
     let stableTicks = 0;
 
-    const waiting = ink("墨水正在紙頁上凝聚……", "rd-diary"); // 等待時的提示墨痕
+    const waiting = ink(t("ink_waiting"), "rd-diary");
 
     const timer = setInterval(() => {
-      if (!extValid()) { // 孤立腳本（擴充重載後）自我銷毀，別在背景空轉改 DOM
+      if (!extValid()) {
         clearInterval(timer);
         if (timer === activeResponseTimer) activeResponseTimer = null;
         return;
@@ -576,16 +697,13 @@
       const streaming = !!document.querySelector(SELECTORS.stopBtn);
       if (streaming) sawStreaming = true;
 
-      // 先等「新的回覆」出現（節點變多，或開始串流）
       if (!appeared) {
         if (responseNodes().length > baseline || streaming) appeared = true;
-        else if (ticks > 120) return finish(timer, waiting, null); // 約 36s 無回應
+        else if (ticks > 120) return finish(timer, waiting, null);
         else return;
       }
 
       const cur = latestResponseText();
-      // 已有「新的回覆節點」時就接受內容，即使文字剛好與上一則相同（如再問一次、相同短句）；
-      // 只有在沒有新節點、且內容仍等於送出前舊回覆時，才視為「還沒開始回」。
       const grew = responseNodes().length > baseline;
       if (!cur || (cur === prev && !grew)) {
         if (ticks > 220) return finish(timer, waiting, null);
@@ -598,12 +716,11 @@
         stableTicks++;
       }
 
-      // 串流停止後、內文穩定數拍即收筆；沒抓到串流則靠穩定判斷
       const done = !streaming && (sawStreaming ? stableTicks >= 3 : stableTicks >= 8);
       if (done) return finish(timer, waiting, lastText);
-      if (ticks > 400) return finish(timer, waiting, lastText); // 上限約 2 分鐘
+      if (ticks > 400) return finish(timer, waiting, lastText);
     }, 300);
-    activeResponseTimer = timer; // 記住目前的輪詢，換頁時可清除
+    activeResponseTimer = timer;
   }
 
   function finish(timer, waiting, text) {
@@ -612,10 +729,10 @@
     if (waiting) waiting.remove();
     const after = () => {
       busy = false;
-      if (queued.length) return startTurn(queued.shift()); // 還有排隊 → 送下一則（已先顯示過）
+      if (queued.length) return startTurn(queued.shift());
       const pen = overlay && overlay.querySelector("#rd-pen");
-      if (pen) pen.placeholder = PEN_PLACEHOLDER; // 全部回完 → 還原提示
+      if (pen) pen.placeholder = t("pen_placeholder");
     };
-    ink(text || "（這次紙頁沒有回音……再試一次？）", "rd-diary", after);
+    ink(text || t("no_echo"), "rd-diary", after);
   }
 })();
