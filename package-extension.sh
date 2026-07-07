@@ -24,6 +24,7 @@ zip -r "$OUTPUT" . \
   -x "package.json" \
   -x "package-lock.json" \
   -x "eslint.config.js" \
+  -x "eslint.config.mjs" \
   -x "CHROMEWEBSTORE.md" \
   -x "README.md" \
   -x "PRIVACY.md" \

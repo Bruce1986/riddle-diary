@@ -1,4 +1,4 @@
-// tests/i18n.test.cjs — i18n 模組單元測試
+// tests/i18n.test.js — i18n 模組單元測試
 // 覆蓋：resolveLocale 邏輯、dictionary key 一致性
 "use strict";
 
@@ -6,9 +6,9 @@ const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
 
-// 依 manifest 載入順序：messages.cjs 先，i18n.cjs 後
-require(path.resolve(__dirname, "../i18n/messages.cjs"));
-const { resolveLocale, getMessage, setLocale, getLocale, initLocale } = require(path.resolve(__dirname, "../i18n/i18n.cjs"));
+// 依 manifest 載入順序：messages.js 先，i18n.js 後
+require(path.resolve(__dirname, "../i18n/messages.js"));
+const { resolveLocale, getMessage, setLocale, getLocale, initLocale } = require(path.resolve(__dirname, "../i18n/i18n.js"));
 
 // messages dict（直接從 globalThis 取，避免重複 require 產生快取問題）
 const messages = globalThis.RiddleDiary.i18n.messages;

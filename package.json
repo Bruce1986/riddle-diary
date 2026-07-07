@@ -2,7 +2,6 @@
   "name": "riddle-diary",
   "version": "0.4.0",
   "private": true,
-  "type": "module",
   "description": "把 AI 聊天介面化為一本神秘的墨水日記",
   "scripts": {
     "lint": "eslint .",

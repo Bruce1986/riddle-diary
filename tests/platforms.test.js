@@ -1,17 +1,17 @@
-// tests/platforms.test.cjs — node:test 單元測試（CommonJS，搭配 UMD 的 require 載入）
+// tests/platforms.test.js — node:test 單元測試（CommonJS，搭配 UMD 的 require 載入）
 "use strict";
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
 // NOTE: this file intentionally loads platforms before registry to test bidirectional self-registration;
-// manifest-load.test.cjs covers the canonical registry-first order.
+// manifest-load.test.js covers the canonical registry-first order.
 // 刻意逆序（platforms 先、registry 後），驗證雙向自我注冊
-const claudePlatform = require("../platforms/claude.cjs");
-const chatgptPlatform = require("../platforms/chatgpt.cjs");
-const geminiPlatform = require("../platforms/gemini.cjs");
-// 再 require registry.cjs：此時三個平台都已掛上
-const { selectPlatform } = require("../platforms/registry.cjs");
+const claudePlatform = require("../platforms/claude.js");
+const chatgptPlatform = require("../platforms/chatgpt.js");
+const geminiPlatform = require("../platforms/gemini.js");
+// 再 require registry.js：此時三個平台都已掛上
+const { selectPlatform } = require("../platforms/registry.js");
 
 // ─── 1. 平台 schema 完整性（動態走訪所有已註冊平台）─────────────────────────
 // 不針對單一平台硬編碼：走訪 globalThis.RiddleDiary.platforms，對每個平台跑同一套
@@ -435,6 +435,6 @@ describe("writeStrategy enum", () => {
   }
 });
 
-// 註：「manifest 載入順序」測試已移到 tests/manifest-load.test.cjs。
+// 註：「manifest 載入順序」測試已移到 tests/manifest-load.test.js。
 // node --test 各測試檔在獨立 process 執行，那裡有天然乾淨的環境，
 // 不需在此檔做 require.cache 備份/還原的脆弱操作。

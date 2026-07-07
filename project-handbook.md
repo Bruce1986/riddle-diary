@@ -27,7 +27,7 @@
 |----------|------|------|-------------|
 | T1 | 本地打包霞鶩文楷 TC 當辰宇落雁體後備，解決罕用字 fallback 變韓文 | ⏳ | 字檔大，可 subset |
 | T2 | 墨水「沉入紙面再回字」電影級動畫 | ⏳ | |
-| T3 | 翻頁 / 羽毛筆音效；書封皮革質感（`writeStrategy` / `features` 為 T3 reserved 欄位） | ⏳ | Gemini 的 Quill 寫入路徑尚未實作（`TODO(T4-E)`）；gemini.cjs 目前保留 `writeStrategy: "quill"` 讓 content.js 的 canary console.warn 能於 live 觸發，待 T4-E 實測後補 Quill-specific 分支或改回 "prosemirror" |
+| T3 | 翻頁 / 羽毛筆音效；書封皮革質感（`writeStrategy` / `features` 為 T3 reserved 欄位） | ⏳ | Gemini 的 Quill 寫入路徑尚未實作（`TODO(T4-E)`）；gemini.js 目前保留 `writeStrategy: "quill"` 讓 content.js 的 canary console.warn 能於 live 觸發，待 T4-E 實測後補 Quill-specific 分支或改回 "prosemirror" |
 | T4 | 擴充到 ChatGPT / Gemini（各一組 SELECTORS + match） | ✅ | 平台檔、Manifest、文件、測試皆完成；live selector 驗證（T4-E）仍待 Bruce 以 DevTools 確認 |
 | T5 | Tangerine 授權條款查證 | ⏳ | 見 `licenses/` |
 
@@ -68,7 +68,7 @@ PR 說明應包含：
 - 錯誤要處理，失敗路徑要有妥善處理（本專案多為 DOM 操作，注意 claude.ai / chatgpt.com / gemini.google.com 改版／context 失效）
 - 不留死 code、不留 TODO 在 main 分支
 - 維持「零對外請求」：不要引入任何 `fetch`/`XHR`/`WebSocket`/外部資源
-- 頁面 DOM 選擇器集中在各平台設定檔 `platforms/<platform>.cjs` 的 `selectors` 物件（`content.js` 只吃抽象介面）
+- 頁面 DOM 選擇器集中在各平台設定檔 `platforms/<platform>.js` 的 `selectors` 物件（`content.js` 只吃抽象介面）
 
 ### PR Review 確認清單
 

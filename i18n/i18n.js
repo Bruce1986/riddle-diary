@@ -25,7 +25,7 @@
     const loc = locale || _currentLocale;
     const messages = (api.i18n && api.i18n.messages) || {};
     const dict = messages[loc] || messages.zh_TW || {};
-    // 只在「messages module 已載入 + 指定 locale dict 缺失」時警告，避免 messages.cjs
+    // 只在「messages module 已載入 + 指定 locale dict 缺失」時警告，避免 messages.js
     // 尚未載入（load order 錯誤）時對所有 locale 誤報 — 該情況下 messages.zh_TW 也不存在。
     if (
       loc !== "zh_TW" &&

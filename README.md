@@ -84,7 +84,7 @@ less content.js
 2. On send, it writes your text into the AI's real input box and clicks send.
 3. It polls for the latest assistant message, cleans it (drops accessibility labels / buttons / thinking blocks), and renders the reply as ink once the AI finishes.
 
-Each platform has its own selector configuration file: `platforms/claude.cjs`, `platforms/chatgpt.cjs`, `platforms/gemini.cjs`. When a platform changes its markup, you usually only need to update that platform's `selectors` object.
+Each platform has its own selector configuration file: `platforms/claude.js`, `platforms/chatgpt.js`, `platforms/gemini.js`. When a platform changes its markup, you usually only need to update that platform's `selectors` object.
 
 ### Fonts & licenses
 
@@ -160,7 +160,7 @@ less content.js
 2. 送出時，把文字寫進 AI 真正的輸入框並按送出。
 3. 輪詢最新一則助理訊息、清掉雜訊（無障礙標籤／按鈕／思考區塊），等 AI 寫完後把回覆以墨水浮現。
 
-各平台設定獨立存放：`platforms/claude.cjs`、`platforms/chatgpt.cjs`、`platforms/gemini.cjs`。平台改版時，通常只要更新該平台檔案的 `selectors`。
+各平台設定獨立存放：`platforms/claude.js`、`platforms/chatgpt.js`、`platforms/gemini.js`。平台改版時，通常只要更新該平台檔案的 `selectors`。
 
 ### 字型與授權
 

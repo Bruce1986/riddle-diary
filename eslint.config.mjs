@@ -1,4 +1,4 @@
-// eslint.config.js — ESLint v9 flat config
+// eslint.config.mjs — ESLint v9 flat config（.mjs 強制 ESM，與 package.json "type" 解耦）
 import js from "@eslint/js";
 import globals from "globals";
 
@@ -24,9 +24,9 @@ export default [
     ignores: ["node_modules/**"],
   },
 
-  // 瀏覽器腳本：content.js、popup.js、platforms/*（.cjs 以 CommonJS/傳統 script 載入）
+  // 瀏覽器腳本：content.js、popup.js、platforms/*.js、i18n/*.js（Chrome MV3 只吃 .js）
   {
-    files: ["content.js", "popup.js", "platforms/**/*.cjs"],
+    files: ["content.js", "popup.js", "platforms/**/*.js", "i18n/**/*.js"],
     ...js.configs.recommended,
     languageOptions: {
       ecmaVersion: 2020,
@@ -55,9 +55,9 @@ export default [
     },
   },
 
-  // 測試檔：Node.js 環境（.cjs 確保以 CommonJS 執行）
+  // 測試檔：Node.js 環境（package.json 移除 "type": "module" 後 .js 預設 CommonJS）
   {
-    files: ["tests/**/*.cjs", "tests/**/*.js"],
+    files: ["tests/**/*.js"],
     ...js.configs.recommended,
     languageOptions: {
       ecmaVersion: 2020,
@@ -71,9 +71,9 @@ export default [
     },
   },
 
-  // eslint.config.js 本身是 ES module
+  // eslint.config.mjs 本身是 ES module
   {
-    files: ["eslint.config.js"],
+    files: ["eslint.config.mjs"],
     languageOptions: {
       ecmaVersion: 2020,
       sourceType: "module",

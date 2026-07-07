@@ -22,7 +22,7 @@
         "https://gemini.google.com/*"
       ],
       "css": ["diary.css"],
-      "js": ["platforms/registry.cjs", "platforms/claude.cjs", "platforms/chatgpt.cjs", "platforms/gemini.cjs", "i18n/messages.cjs", "i18n/i18n.cjs", "content.js"],
+      "js": ["platforms/registry.js", "platforms/claude.js", "platforms/chatgpt.js", "platforms/gemini.js", "i18n/messages.js", "i18n/i18n.js", "content.js"],
       "run_at": "document_idle"
     }
   ],
