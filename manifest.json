@@ -28,7 +28,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["fonts/*"],
+      "resources": ["fonts/*", "icons/*"],
       "matches": [
         "https://claude.ai/*",
         "https://chatgpt.com/*",

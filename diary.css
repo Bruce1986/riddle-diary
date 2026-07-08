@@ -264,9 +264,12 @@
   width: 44px;
   height: 44px;
   padding: 0;
-  border: none;
+  border: 1px solid #c9a961; /* 金框：即便 icon 圖沒載入也維持可視 */
   border-radius: 8px;
-  background-color: transparent;
+  /* fallback：icon 若因 web_accessible_resources 政策或路徑錯誤沒載成功，
+     仍能看到皮革深棕底色 + 金框，不會變透明方塊、使用者找不到點擊點 */
+  background-color: #2a1810;
+  background-image: radial-gradient(circle at 30% 30%, #3a2215, #130b04);
   background-size: cover;
   background-repeat: no-repeat;
   background-position: center;
