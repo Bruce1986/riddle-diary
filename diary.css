@@ -250,3 +250,37 @@
   line-height: 1.85;
   padding: 20px 4px;
 }
+
+/* ── 翻回日記 · 浮動按鈕 ─────────────────────────────────────────────
+   當覆蓋層被闔上（rd-hidden）或被停用時，於頁面右下浮出小型書本圖示，
+   點擊即可重開覆蓋層，避免使用者必須從 Chrome 工具列進 popup 才能開回。
+   刻意放在 overlay 之外（append 到 documentElement），這樣 rd-hidden 隱藏
+   overlay 時，此按鈕仍能維持可見。 */
+#rd-reopen {
+  display: none;
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background-color: transparent;
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center;
+  cursor: pointer;
+  z-index: 2147483645; /* 略低於 overlay 的 2147483646；overlay 顯示時仍蓋在上面 */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.42);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+#rd-reopen.rd-visible { display: block; }
+#rd-reopen:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.55);
+}
+#rd-reopen:focus-visible {
+  outline: 2px solid #6b1d12;
+  outline-offset: 2px;
+}

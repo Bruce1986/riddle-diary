@@ -16,6 +16,7 @@
       peek_button:        "窺視",
       close_button:       "闔上",
       open_new_page:      "✚ 翻開新的一頁",
+      reopen_hint:        "翻回日記",
 
       // ── 書籤 / 歷史面板 ────────────────────────────────────────────
       bookmark_aria:      "翻開左側的歷史篇章",
@@ -57,6 +58,7 @@
       peek_button:        "Peek",
       close_button:       "Close",
       open_new_page:      "✚ Turn to a New Page",
+      reopen_hint:        "Open the diary",
 
       // ── Bookmark / history panel ───────────────────────────────────
       bookmark_aria:      "Open the history chapters on the left",

@@ -82,23 +82,31 @@
   // buildOverlay() 建立的 DOM 元素帶有 data-i18n 屬性，記錄需更新的字串鍵。
   // applyI18n() 遍歷所有帶有 data-i18n 的元素，重新套用目前語言的字串。
   function applyI18n() {
-    if (!overlay) return;
-    overlay.querySelectorAll("[data-i18n]").forEach(function (el) {
-      var key = el.getAttribute("data-i18n");
-      var attr = el.getAttribute("data-i18n-attr"); // 特定 attribute（如 aria-label、title、placeholder）
-      if (attr) {
-        el.setAttribute(attr, t(key));
-      } else {
-        el.textContent = t(key);
-      }
-    });
-    // 更新 title tooltips（buildOverlay 時以 data-i18n-title 記錄鍵，語言切換時重新套用）
-    overlay.querySelectorAll("[data-i18n-title]").forEach(function (el) {
-      var key = el.getAttribute("data-i18n-title");
-      var val = t(key);
-      if (val) el.setAttribute("title", val);
-    });
-    // placeholder 由 data-i18n-attr="placeholder" 處理（見 buildOverlay 中的 textarea）
+    if (overlay) {
+      overlay.querySelectorAll("[data-i18n]").forEach(function (el) {
+        var key = el.getAttribute("data-i18n");
+        var attr = el.getAttribute("data-i18n-attr"); // 特定 attribute（如 aria-label、title、placeholder）
+        if (attr) {
+          el.setAttribute(attr, t(key));
+        } else {
+          el.textContent = t(key);
+        }
+      });
+      // 更新 title tooltips（buildOverlay 時以 data-i18n-title 記錄鍵，語言切換時重新套用）
+      overlay.querySelectorAll("[data-i18n-title]").forEach(function (el) {
+        var key = el.getAttribute("data-i18n-title");
+        var val = t(key);
+        if (val) el.setAttribute("title", val);
+      });
+      // placeholder 由 data-i18n-attr="placeholder" 處理（見 buildOverlay 中的 textarea）
+    }
+    // 翻回按鈕在 overlay 之外，需單獨刷新語言字串
+    const rb = document.getElementById("rd-reopen");
+    if (rb) {
+      const label = t("reopen_hint");
+      rb.title = label;
+      rb.setAttribute("aria-label", label);
+    }
   }
 
   // ── 語言變更時的 re-render ──────────────────────────────────────
@@ -129,6 +137,8 @@
             overlay.classList.add("rd-hidden");
             resetState();
           }
+          if (!state.enabled) ensureReopenButton(); // 停用時保證按鈕存在
+          updateReopenVisibility(); // 依 overlay 狀態顯示/隱藏翻回按鈕
         }
       }
       if (changes.rd_persona) state.persona = changes.rd_persona.newValue;
@@ -211,12 +221,64 @@
     }
   }
 
+  // ── 翻回日記按鈕（overlay 隱藏 / 停用時的浮動入口） ─────────────────
+  // 刻意 append 到 documentElement（在 overlay 之外），這樣 overlay 被
+  // rd-hidden 隱藏時，此按鈕仍可見；overlay 顯示時由 updateReopenVisibility 隱藏。
+  function ensureReopenButton() {
+    let btn = document.getElementById("rd-reopen");
+    if (btn) return btn;
+    btn = document.createElement("button");
+    btn.id = "rd-reopen";
+    btn.setAttribute("data-i18n-title", "reopen_hint");
+    btn.setAttribute("data-i18n", "reopen_hint");
+    btn.setAttribute("data-i18n-attr", "aria-label");
+    btn.title = t("reopen_hint");
+    btn.setAttribute("aria-label", t("reopen_hint"));
+    try {
+      btn.style.backgroundImage =
+        "url(\"" + chrome.runtime.getURL("icons/icon-48.png") + "\")";
+    } catch (_e) {
+      /* context 失效：退回無圖背景（純皮革色由 CSS box-shadow 撐起可視性） */
+    }
+    btn.addEventListener("click", function () {
+      state.enabled = true;
+      safeStorageSet({ rd_enabled: true });
+      if (!overlay) {
+        if (onOverlayPath()) buildOverlay();
+      } else {
+        overlay.classList.remove("rd-hidden");
+        lastUrl = location.href;
+        resetState();
+        const feed = overlay.querySelector("#rd-feed");
+        if (feed) feed.innerHTML = "";
+        startIntro();
+        watchUrlChanges();
+      }
+      updateReopenVisibility();
+    });
+    document.documentElement.appendChild(btn);
+    return btn;
+  }
+  function updateReopenVisibility() {
+    const btn = document.getElementById("rd-reopen");
+    if (!btn) return;
+    const overlayHidden = !overlay || overlay.classList.contains("rd-hidden");
+    const shouldShow = overlayHidden && onOverlayPath();
+    btn.classList.toggle("rd-visible", shouldShow);
+  }
+
   // ── 啟動：先初始化語言，再讀其餘設定 ────────────────────────────
   function boot() {
     safeStorageGet({ rd_enabled: true, rd_persona: true }, function (cfg) {
       state.enabled = cfg.rd_enabled;
       state.persona = cfg.rd_persona;
-      if (state.enabled && onOverlayPath()) buildOverlay();
+      if (state.enabled && onOverlayPath()) {
+        buildOverlay();
+      } else if (!state.enabled && onOverlayPath()) {
+        // 使用者上次闔上了日記，但仍在支援站台 → 顯示翻回按鈕
+        ensureReopenButton();
+        updateReopenVisibility();
+      }
       bootComplete = true; // 初始化完成，允許 storage.onChanged 觸發重渲染
     });
   }
@@ -353,6 +415,8 @@
       overlay.classList.add("rd-hidden"); // 直接隱藏，不依賴 storage 事件
       resetState(); // 清掉背景計時器，避免隱藏後還在空轉
       safeStorageSet({ rd_enabled: false }); // 盡力持久化（context 失效時略過）
+      ensureReopenButton();
+      updateReopenVisibility(); // 顯示翻回日記浮動按鈕
     });
 
     // 「窺視」：按住可看底層 Claude，放開即恢復。
