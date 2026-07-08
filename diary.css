@@ -1,0 +1,253 @@
+/* ── 字型載入策略（重要） ──────────────────────────────────────────
+   兩個字型都「本地打包」在擴充 fonts/ 內，由 content.js 用 chrome.runtime.getURL()
+   注入 chrome-extension:// 的 @font-face：
+   - 'Diary EN' = Tangerine（英文花體，fonts/Tangerine-700.ttf）
+   - 'Chenyu'   = 辰宇落雁體（中文手寫，fonts/ChenYuluoyan-Thin.ttf）
+   好處：完全零對外請求（連字型都不連網），且不受 claude.ai 的 CSP font-src 限制。
+   若注入失敗（如 context 失效），會退回系統標楷體／襯線體。 */
+
+/* 整層覆蓋在 claude.ai 之上 */
+#rd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1c1208;
+  font-family: 'Diary EN', 'Chenyu', 'LXGW WenKai TC', 'BiauKai', '標楷體', 'STKaiti', 'Kaiti TC', 'DFKai-SB', 'KaiTi', 'Snell Roundhand', 'Apple Chancery', cursive, serif;
+}
+#rd-overlay.rd-hidden { display: none; }
+
+/* 鍵盤焦點可見（無障礙）—— 所有可互動元素聚焦時顯示墨紅色外框 */
+#rd-overlay :focus-visible {
+  outline: 2px solid #6b1d12;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* 書頁 */
+#rd-book {
+  position: relative;
+  width: min(760px, 92vw);
+  height: min(82vh, 760px);
+  background: #e7d9b8;
+  border: 1px solid #b9a373;
+  border-radius: 8px;
+  box-shadow: 0 18px 60px rgba(0,0,0,.55), inset 0 0 80px rgba(120,90,40,.18);
+  display: flex;
+  flex-direction: column;
+  padding: 34px 44px 0;
+  overflow: hidden;
+}
+#rd-book::before {
+  content: "";
+  position: absolute;
+  left: 64px; top: 0; bottom: 0;
+  width: 1px; background: rgba(194,84,47,.33);
+}
+
+#rd-feed {
+  flex: 1;
+  overflow-y: auto;
+  line-height: 2.1;
+  font-size: 25px;
+  padding-right: 6px;
+}
+#rd-feed::-webkit-scrollbar { width: 6px; }
+#rd-feed::-webkit-scrollbar-thumb { background: #b9a37388; border-radius: 4px; }
+
+.rd-line { white-space: pre-wrap; } /* 保留 cleanText 取得的換行與空格，避免多段落/列表被合併成一行 */
+.rd-line span { opacity: 0; transition: opacity .5s ease; }
+.rd-line.rd-diary { color: #2a1206; padding-left: 26px; text-shadow: 0 0 1px rgba(42,18,6,.25); }
+.rd-line.rd-me { color: #3a3a8c; text-align: right; }
+
+/* 用 !important 蓋掉 claude.ai 對 textarea 的全域樣式（深色底、圓角、陰影等） */
+#rd-pen {
+  font-family: inherit !important;
+  font-size: 23px !important;
+  color: #3a3a8c !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  border-top: 1px dashed rgba(185,163,115,.6) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  padding: 16px 0 8px !important;
+  margin: 0 !important;
+  resize: none !important;
+  line-height: 1.6 !important;
+  max-height: 120px !important;
+  caret-color: #3a3a8c !important;
+}
+#rd-pen::placeholder { color: rgba(138,121,80,.55) !important; }
+
+#rd-caption {
+  font-family: inherit;
+  font-size: 15px;
+  color: #9a7f4d;
+  text-align: center;
+  padding: 8px 0 14px;
+  letter-spacing: .05em;
+}
+
+/* 角落小按鈕 */
+.rd-corner {
+  position: absolute;
+  top: 14px; right: 16px;
+  display: flex; gap: 8px;
+}
+.rd-corner button {
+  font-family: 'Chenyu', 'BiauKai', '標楷體', 'STKaiti', serif;
+  font-size: 17px;
+  color: #6b1d12;
+  background: transparent;
+  border: 1px solid rgba(107,29,18,.28);
+  border-radius: 5px;
+  padding: 3px 12px;
+  letter-spacing: .12em;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.rd-corner button:hover { background: rgba(107,29,18,.10); color: #4a130b; }
+
+/* 書頁需要 3D 透視才能讓書封翻開 */
+#rd-book { perspective: 2000px; }
+
+/* ── 啟動書封 ──────────────────────────────────────────────────── */
+#rd-cover {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: #241a10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transform-origin: left center;
+  transition: transform .9s ease, opacity .9s ease;
+  box-shadow: inset 0 0 130px rgba(0,0,0,.65);
+}
+#rd-cover.rd-open { transform: rotateY(-152deg); opacity: 0; }
+.rd-cover-frame {
+  text-align: center;
+  padding: 46px 64px;
+  border: 1px solid #6b5320;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 4px rgba(201,168,74,.10);
+}
+.rd-cover-title { font-family: 'Diary EN', serif; font-size: 64px; color: #cdae57; line-height: 1; }
+.rd-cover-rule { width: 120px; height: 1px; background: #8a6d2e; margin: 16px auto; }
+.rd-cover-sub { font-family: 'Diary EN', serif; font-size: 26px; color: #9a7f3d; letter-spacing: .12em; }
+.rd-cover-hint {
+  margin-top: 42px;
+  font-family: 'Chenyu', serif;
+  font-size: 16px;
+  color: #8a7138;
+  letter-spacing: .35em;
+  animation: rd-breathe 2.4s ease-in-out infinite;
+}
+@keyframes rd-breathe { 0%,100% { opacity: .35; } 50% { opacity: .9; } }
+
+/* ── 書籤 ──────────────────────────────────────────────────────── */
+#rd-bookmark {
+  position: absolute;
+  top: 110px;
+  left: 0;
+  z-index: 4;
+  padding: 16px 7px;
+  background: #7a1f12;
+  color: #f0e2c0;
+  border-radius: 0 7px 7px 0;
+  box-shadow: 2px 2px 7px rgba(0,0,0,.35);
+  cursor: pointer;
+  writing-mode: vertical-rl;
+  letter-spacing: .25em;
+  font-family: 'Chenyu', serif;
+  font-size: 17px;
+  transition: padding-left .15s ease;
+}
+#rd-bookmark:hover { padding-left: 12px; }
+
+/* ── 歷史面板（書籤往左翻出） ──────────────────────────────────── */
+#rd-history {
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  z-index: 6;
+  width: 64%;
+  max-width: 440px;
+  background: #ded0ac !important;
+  border-right: 2px solid #b9a373;
+  box-shadow: 7px 0 26px rgba(0,0,0,.28);
+  transform: translateX(-102%);
+  transition: transform .45s cubic-bezier(.4,0,.2,1);
+  display: flex;
+  flex-direction: column;
+  padding: 22px 24px;
+}
+#rd-overlay.rd-hist-open #rd-history { transform: translateX(0); }
+.rd-hist-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: 'Chenyu', serif;
+  font-size: 24px;
+  color: #3a2a14;
+  margin-bottom: 14px;
+}
+#rd-hist-close {
+  font-family: -apple-system, sans-serif;
+  font-size: 13px;
+  color: #6b5a36;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+#rd-new {
+  font-family: 'Chenyu', serif;
+  font-size: 18px;
+  color: #5a1810;
+  background: rgba(122,31,18,.08);
+  border: 1px solid rgba(185,115,115,.4);
+  border-radius: 6px;
+  padding: 10px;
+  cursor: pointer;
+  margin-bottom: 14px;
+}
+#rd-new:hover { background: rgba(122,31,18,.16); }
+.rd-hist-list { flex: 1; min-height: 0; overflow-y: auto; }
+.rd-hist-list::-webkit-scrollbar { width: 6px; }
+.rd-hist-list::-webkit-scrollbar-thumb { background: #b9a37388; border-radius: 4px; }
+.rd-hist-item {
+  display: block;
+  width: 100%;
+  flex: none;
+  box-sizing: border-box;
+  font-family: 'Chenyu', 'BiauKai', '標楷體', 'STKaiti', serif;
+  font-size: 19px;
+  line-height: 1.75;
+  color: #2a1d0e;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed rgba(185,163,115,.45);
+  padding: 9px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rd-hist-item:hover { background: rgba(122,31,18,.07); }
+.rd-hist-empty {
+  font-family: 'Chenyu', serif;
+  color: #7a6533;
+  font-size: 16px;
+  line-height: 1.85;
+  padding: 20px 4px;
+}

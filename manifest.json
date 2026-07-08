@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "湯姆瑞斗的日記本",
+  "version": "0.3.1",
+  "description": "把 Claude 的聊天介面偽裝成湯姆·瑞斗的魔法日記：你落筆，墨水滲入紙頁，日記再以墨水浮現回應你。",
+  "permissions": ["storage"],
+  "action": {
+    "default_title": "湯姆瑞斗的日記本",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://claude.ai/*"],
+      "css": ["diary.css"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["fonts/*"],
+      "matches": ["https://claude.ai/*"]
+    }
+  ]
+}
