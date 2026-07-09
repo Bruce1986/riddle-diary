@@ -259,7 +259,9 @@
 #rd-reopen {
   display: none;
   position: fixed;
-  bottom: 20px;
+  /* bottom 抬高避開三站底部 input bar / mic button：
+     Claude/ChatGPT ~120px 輸入區、Gemini mic FAB 直接在右下 —— 96px 統一避開 */
+  bottom: 96px;
   right: 20px;
   width: 44px;
   height: 44px;
