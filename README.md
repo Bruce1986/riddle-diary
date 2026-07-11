@@ -49,6 +49,7 @@ This project is built to be **verifiable, not just "trust me."** Both Taiwanese 
 | host `https://chat.openai.com/*` | Legacy ChatGPT domain — redirects to chatgpt.com; covered for users with bookmarked old URLs. |
 | host `https://gemini.google.com/*` | To draw the diary overlay and bridge the conversation on Gemini. |
 | `web_accessible_resources: fonts/*` | So the page can load the locally bundled Traditional Chinese font over `chrome-extension://`. |
+| `web_accessible_resources: icons/*` | So the reopen button can load the extension icon over `chrome-extension://`. |
 
 That is the complete list. There is no `tabs`, `cookies`, `webRequest`, `<all_urls>`, or background service worker.
 
@@ -125,6 +126,7 @@ Code: **MIT** — see [`LICENSE`](LICENSE). Bundled fonts keep their own OSS lic
 | host `https://chat.openai.com/*` | ChatGPT 的舊版網域（書籤使用者），現多轉址到 chatgpt.com。 |
 | host `https://gemini.google.com/*` | 在 Gemini 頁面畫日記介面、橋接對話。 |
 | `web_accessible_resources: fonts/*` | 讓頁面能用 `chrome-extension://` 載入本地打包的中文字型。 |
+| `web_accessible_resources: icons/*` | 讓「翻回日記」按鈕能用 `chrome-extension://` 載入擴充圖示。 |
 
 這就是全部。沒有 `tabs`、`cookies`、`webRequest`、`<all_urls>`，也沒有背景 service worker。
 

@@ -15,7 +15,7 @@ This folder keeps the license files for the fonts used by the extension, so they
 
 - **Tangerine — confirmed SIL OFL 1.1.** The first line of `Tangerine-LICENSE.txt` reads "Copyright … All rights reserved", which is the standard OFL copyright-holder notice (`Tangerine` is the OFL Reserved Font Name); the file then contains the full SIL OFL 1.1 text granting use/embed/redistribute. OFL explicitly permits bundling fonts with software, so local bundling here is compliant.
   Tangerine 已確認為 **SIL OFL 1.1**。授權檔第 1 行「All rights reserved」是 OFL 版權人標準寫法（`Tangerine` 是保留字型名稱），其後即完整 OFL 1.1 條款，明文允許嵌入/隨軟體散佈，故本地打包合規。
-- **Chenyuluoyan 2.0** merges the "jf 7000" character set — confirm that set's license is OFL‑compatible.
-  辰宇落雁體 2.0 併入「jf 7000 字集」，需確認該字集授權與 OFL 相容。
+- **Chenyuluoyan 2.0** merges the "jf 7000" character set — resolved: jf7000 is a character-set *specification* (its CC BY-SA 4.0 covers only the spec document); glyphs newly drawn against the spec ship under the font's own OFL 1.1, so bundling is compliant (see TODO-chromewebstore-launch.md §S4).
+  辰宇落雁體 2.0 併入「jf 7000 字集」——已釐清：jf7000 是字集「規格」（CC BY-SA 4.0 只約束規格文件本身），對照規格新繪的字型仍以 OFL 1.1 發佈，打包合規（見 TODO-chromewebstore-launch.md §S4）。
 - **Distribution matters.** Bundling a font (as we do for Chenyuluoyan) means redistributing it, so its OFL/LICENSE must ship alongside — which is exactly why this folder exists.
   **散佈情境很重要。** 打包字型（如辰宇落雁體）等於再散佈該字型，必須隨附其 OFL/LICENSE —— 這也是本資料夾存在的原因。

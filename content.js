@@ -327,9 +327,26 @@
         }
         return;
       }
-      if (overlay.classList.contains("rd-hidden")) {
-        updateReopenVisibility(); // 闔上狀態下換頁：翻回按鈕跟著路由顯示/隱藏
+      // 導航到非 overlay 頁（/settings、/login…）→ 隱藏日記，別蓋住頁面
+      if (!onOverlayPath()) {
+        if (!overlay.classList.contains("rd-hidden")) {
+          overlay.classList.add("rd-hidden");
+          resetState(); // 清背景計時器（urlWatchId 一併被清）→ 立刻重啟監看
+          watchUrlChanges();
+        }
+        updateReopenVisibility();
         return;
+      }
+      if (overlay.classList.contains("rd-hidden")) {
+        // 使用者主動闔上（enabled=false）→ 保持隱藏，重載交由「翻回」按鈕處理
+        if (!state.enabled) {
+          updateReopenVisibility(); // 闔上狀態下換頁：翻回按鈕跟著路由顯示/隱藏
+          return;
+        }
+        // 先前離開對話頁被自動隱藏（仍 enabled）→ 回到對話頁重新顯示；
+        // 不 return：往下走統一重置＋startIntro 重新鋪內容
+        overlay.classList.remove("rd-hidden");
+        updateReopenVisibility();
       }
       // 送出第一則訊息後，平台會把新對話從 / 或 /new 或 /app 重導到既有對話路徑。
       // 若此時正忙（busy：第一則訊息的動畫/輪詢進行中），不要重置與清空畫面，

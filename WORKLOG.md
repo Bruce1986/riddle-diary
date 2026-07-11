@@ -52,3 +52,8 @@ UMD 包裝（`if (typeof module !== "undefined" && module.exports) module.export
 - **文件同步**：09be4b8 漏改的 .cjs 路徑（GEMINI／CHROMEWEBSTORE／TODO-i18n）；GEMINI.md 改指各平台檔的 selectors；README／PRIVACY 行數 730 → 830、驗證 grep 與 less 涵蓋 platforms/ i18n/；TODO-i18n key 數 20 → 28；TODO-chromewebstore-launch 目標改 v0.4.0 並加 T4-E 閘門；CHROMEWEBSTORE 支援平台段補「ChatGPT／Gemini 仍在實測驗證」中英 caveat（對外文案原本是唯一沒 hedge 的地方）；gemini.js features 註解改為如實描述「尚未接線」。
 驗證：123 個測試全過、lint 綠；新測試均紅過一次（manifest 打亂→紅、content.js 消費未列鍵→紅、registry 退化裸 endsWith→紅）；打包 zip 復驗零 .git 條目。
 事前預測：後續審查輪 ≤1 條 medium、0 high（信心六成）。
+
+#### R2 補充（同日）
+- 事前預測落空（實際 1 high・3 medium）：**第三條 SPA 回歸**——導航離開對話頁（/chat/x → /settings）時 main 會把 overlay 加 rd-hidden 並 resetState，v0.4.0 重寫時同樣遺失，結果日記全螢幕蓋死設定頁、startIntro 還在上面跑動畫。已補回隱藏分支＋「自動隱藏（仍 enabled）回到對話頁自動重現」分支，保留翻回按鈕與 busy guard 語意。※ content.js 的 SPA 行為無單元測試覆蓋，此類修正屬 unvalidated-by-tests，合併前建議 live 手測三站換頁。
+- README 權限表中英兩處補列 `web_accessible_resources: icons/*`（manifest 有宣告、content.js:239 翻回按鈕在用，表格卻宣稱「這就是全部」）。
+- licenses/README.md 的 jf7000 開放疑問與 TODO-chromewebstore-launch §S4 的「已排除」結論矛盾——已依 S4 結論更新（jf7000 為字集規格，CC BY-SA 只管規格文件，字型本體 OFL 1.1）。
