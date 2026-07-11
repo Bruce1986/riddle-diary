@@ -26,7 +26,7 @@
 `CHROMEWEBSTORE.md` 新增 "## English Locale (en)" 區塊：Extension Name / Short Description (≤132) / Detailed Description / Single Purpose。
 
 ### I4 — 測試 ✅（含在 I2）
-新增 `tests/i18n.test.js（時名 .cjs）` 17 個測試（`resolveLocale` 邊界、字典 key parity、`getMessage`）；連同原本 37 個 → 54 tests 全過。
+新增 `tests/i18n.test.js`（時名 .cjs） 17 個測試（`resolveLocale` 邊界、字典 key parity、`getMessage`）；連同原本 37 個 → 54 tests 全過。
 
 ### I5 — 目測驗收 ⏳ Bruce
 - Chrome 載入未封裝擴充，切三種語言選項，確認 in-page + popup 都跟著變
