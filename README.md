@@ -77,7 +77,7 @@ less content.js platforms/*.js i18n/*.js
 - **Write** — type at the bottom of the page; `Enter` to send, `Shift+Enter` for a new line. (IME composition is respected — your first Enter just confirms candidates.)
 - **Bookmark / history** — click the red ribbon on the left edge to slide out your past conversations; click one to switch, or "✚ open a new page" to start fresh.
 - **Peek** — press and hold "窺視" (top‑right) to briefly see the real AI interface underneath.
-- **Close** — "闔上" (top‑right) removes the disguise; re‑open it from the toolbar icon.
+- **Close** — "闔上" (top‑right) removes the disguise; a small floating book button appears at the bottom‑right to reopen it directly (or use the toolbar icon).
 
 ### How it works
 
@@ -154,7 +154,7 @@ less content.js platforms/*.js i18n/*.js
 - **落筆**：在頁面底部輸入；`Enter` 送出、`Shift+Enter` 換行。（尊重輸入法組字 —— 注音/拼音選字的第一個 Enter 只會確認選字。）
 - **書籤／歷史**：點左緣紅色緞帶滑出過往對話；點一條切換，或「✚ 翻開新的一頁」開新對話。
 - **窺視**：長按右上「窺視」可暫時看一眼底下真實的 AI 介面。
-- **闔上**：右上「闔上」關掉偽裝；可從工具列圖示重新開啟。
+- **闔上**：右上「闔上」關掉偽裝；右下會浮出小書本「翻回日記」按鈕可直接翻回（也可從工具列圖示重新開啟）。
 
 ### 運作原理
 

@@ -76,6 +76,10 @@
   let introPoll = null; // startIntro 的訊息輪詢
   let reloadTimer = null; // SPA 換頁後延遲重載
   let urlWatchId = null; // watchUrlChanges 的輪詢（模組作用域，resetState 可清除）
+  let openBookTimer = null; // 開書動畫的計時器：防連點重複 startIntro，resetState 一併清
+  // 上次渲染的 DOM 節點實例集合，用於偵測 SPA 換頁是否已換新：比字串指紋更精準——
+  // 即使新舊對話文字完全相同，React 重掛載出的也是全新節點實例，故能「零延遲」分辨。
+  let lastRenderedNodes = new Set();
   let rdTextHolder = null; // cleanText 重複使用的離畫面隱藏容器（避免每次建立/移除）
 
   // ── [data-i18n] 重新套用機制 ────────────────────────────────────
@@ -124,7 +128,7 @@
           if (state.enabled) {
             if (!overlay) {
               if (onOverlayPath()) buildOverlay();
-            } else {
+            } else if (onOverlayPath()) { // 非對話頁則維持隱藏，不蓋住頁面
               overlay.classList.remove("rd-hidden");
               lastUrl = location.href;
               resetState();
@@ -136,6 +140,7 @@
           } else if (overlay) {
             overlay.classList.add("rd-hidden");
             resetState();
+            watchUrlChanges(); // resetState 清了 urlWatchId：停用期間仍要監看路由，翻回按鈕才會跟著顯示/隱藏
           }
           if (!state.enabled) ensureReopenButton(); // 停用時保證按鈕存在
           updateReopenVisibility(); // 依 overlay 狀態顯示/隱藏翻回按鈕
@@ -245,7 +250,7 @@
       safeStorageSet({ rd_enabled: true });
       if (!overlay) {
         if (onOverlayPath()) buildOverlay();
-      } else {
+      } else if (onOverlayPath()) { // 非對話頁不重現（stale 按鈕不得把 overlay 蓋到設定頁上）
         overlay.classList.remove("rd-hidden");
         lastUrl = location.href;
         resetState();
@@ -298,6 +303,7 @@
     if (activeResponseTimer) { clearInterval(activeResponseTimer); activeResponseTimer = null; }
     if (introPoll) { clearInterval(introPoll); introPoll = null; }
     if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
+    if (openBookTimer) { clearTimeout(openBookTimer); openBookTimer = null; }
     if (urlWatchId) { clearInterval(urlWatchId); urlWatchId = null; }
     busy = false;
     queued.length = 0;
@@ -459,6 +465,7 @@
     overlay.querySelector("#rd-close").addEventListener("click", () => {
       overlay.classList.add("rd-hidden"); // 直接隱藏，不依賴 storage 事件
       resetState(); // 清掉背景計時器，避免隱藏後還在空轉
+      watchUrlChanges(); // resetState 清了 urlWatchId：闔上期間仍要監看路由，翻回按鈕才會跟著顯示/隱藏
       safeStorageSet({ rd_enabled: false }); // 盡力持久化（context 失效時略過）
       ensureReopenButton();
       updateReopenVisibility(); // 顯示翻回日記浮動按鈕
@@ -501,10 +508,12 @@
 
   // ── 啟動書封動畫 ────────────────────────────────────────────────
   function openBook() {
+    if (openBookTimer) return; // 動畫進行中：忽略連點，避免重複計時器與重複 startIntro
     const cover = overlay.querySelector("#rd-cover");
     if (!cover) return startIntro();
     cover.classList.add("rd-open");
-    setTimeout(() => {
+    openBookTimer = setTimeout(() => {
+      openBookTimer = null;
       cover.remove();
       startIntro();
     }, 900);
@@ -516,21 +525,30 @@
     // 在既有對話頁 → 等訊息載入後，把整段對話鋪進日記；否則顯示開場白
     if (PLATFORM.isExistingConversationPath(location.pathname)) {
       let tries = 0;
+      const MAX_TRIES = 50; // 約 15 秒（300ms × 50）：對話頁必有歷史訊息，放寬以容忍慢速網路
       introPoll = setInterval(() => {
         if (!extValid()) { clearInterval(introPoll); introPoll = null; return; } // 孤立腳本自我銷毀
         tries++;
         const nodes = document.querySelectorAll(
           SELECTORS.userMsg + "," + SELECTORS.response
         );
+        // SPA 換對話時，頁面 DOM 可能還殘留上一段對話的訊息；
+        // 若當前任一節點仍是「上次渲染過的同一實例」，代表 DOM 尚未換新，繼續等（逾時才放行）。
+        const isStale = Array.from(nodes).some((node) => lastRenderedNodes.has(node));
+        if (nodes.length && isStale && tries < MAX_TRIES) {
+          return;
+        }
         if (nodes.length) {
           clearInterval(introPoll);
           introPoll = null;
           renderExisting(nodes);
           if (pen) pen.focus();
-        } else if (tries > 24) {
+        } else if (tries > MAX_TRIES) {
           clearInterval(introPoll);
           introPoll = null;
-          showIntroLine(pen); // 約 7 秒仍無訊息 → 當作空白頁（放寬以容忍慢網路）
+          // 對話頁必有歷史訊息，逾時仍空 = 載入失敗，顯示錯誤而非「空白新日記」開場白
+          // （後者會誤導，且歷史訊息真的載入後也無法再鋪進來）。
+          ink(t("load_fail"), "rd-diary");
         }
       }, 300);
     } else {
@@ -547,7 +565,7 @@
     const feed = overlay.querySelector("#rd-feed");
     feed.innerHTML = "";
     const frag = document.createDocumentFragment();
-    nodes.forEach((node) => {
+    outermost(nodes).forEach((node) => { // 去巢狀，避免容器＋子元素重複渲染
       const isUser = node.matches(SELECTORS.userMsg);
       const text = cleanText(node);
       if (!text) return;
@@ -558,6 +576,8 @@
     });
     feed.appendChild(frag);
     feed.scrollTop = feed.scrollHeight;
+    // 記下這次渲染的節點實例，供下次 SPA 換頁時比對 DOM 是否已換新
+    lastRenderedNodes = new Set(nodes);
   }
 
   // ── 歷史篇章（書籤翻頁） ────────────────────────────────────────
@@ -662,9 +682,25 @@
     return line;
   }
 
-  // 取得目前所有「助理回覆」節點。
+  // 從節點集合濾掉「被集合內其他節點包含」的內層節點。
+  // 因為 SELECTORS.response 的多個選擇器可能同時命中容器與其子元素（querySelectorAll
+  // 只會去除「完全相同」的節點，不會去除巢狀），不過濾會造成同一則訊息被算兩次／渲染兩次。
+  function outermost(nodeList) {
+    const arr = Array.from(nodeList);
+    const set = new Set(arr); // 祖先回溯：O(N×深度) 取代兩兩 contains 檢查
+    return arr.filter((n) => {
+      let p = n.parentNode;
+      while (p) {
+        if (set.has(p)) return false; // 有祖先也在集合內 → 是內層節點，濾掉
+        p = p.parentNode;
+      }
+      return true;
+    });
+  }
+
+  // 取得目前所有「助理回覆」節點（已去巢狀）。
   function responseNodes() {
-    return document.querySelectorAll(SELECTORS.response);
+    return outermost(document.querySelectorAll(SELECTORS.response));
   }
 
   // 擷取節點的乾淨內文：剔除無障礙標籤、按鈕、思考區塊
@@ -725,8 +761,11 @@
     const prev = latestResponseText();
     if (sendToClaude(toSend)) {
       watchResponse(baseline, prev);
-    } else if (pen) {
-      pen.placeholder = t("pen_placeholder");
+    } else {
+      // 送出失敗：重置 busy 並清掉佇列（否則排隊中的訊息會永遠卡住），還原提示
+      busy = false;
+      queued.length = 0;
+      if (pen) pen.placeholder = t("pen_placeholder");
     }
   }
 
@@ -738,7 +777,9 @@
     }
     const ed = document.querySelector(SELECTORS.editor);
     if (!ed) {
-      ink(t("no_editor"), "rd-diary", () => { busy = false; });
+      ink(t("no_editor"), "rd-diary");
+      // busy／佇列的重置一律交給呼叫端 startTurn 同步處理，避免「非同步 callback 設 busy」
+      // 與「同步設 busy」互相競態（例如失敗 callback 晚一步把新一輪的 busy 清掉）。
       return false;
     }
     ed.focus();
@@ -750,14 +791,11 @@
       inserted = false;
     }
     if (!inserted) {
-      ed.dispatchEvent(
-        new InputEvent("beforeinput", {
-          bubbles: true,
-          cancelable: true,
-          inputType: "insertText",
-          data: text,
-        })
-      );
+      // execCommand 失敗時不派發合成 beforeinput：ProseMirror 類編輯器靠 DOM 變動觀察器
+      // 取得輸入，合成事件不會觸發瀏覽器的預設插入，文字其實寫不進去，只會拖到
+      // watchResponse 逾時才解鎖。直接提示並回傳 false，由呼叫端立即重置 busy／佇列。
+      ink(t("insert_fail"), "rd-diary");
+      return false;
     }
     let attempts = 0;
     const trySend = () => {

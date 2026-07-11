@@ -35,6 +35,8 @@
       ink_waiting:        "墨水正在紙頁上凝聚……",
       no_echo:            "（這次紙頁沒有回音……再試一次？）",
       no_editor:          "（紙頁無法與底下的墨池相連…請確認頁面已開啟一個對話）",
+      insert_fail:        "（紙頁無法把墨水寫入底下的輸入框…請重新整理頁面或手動輸入）",
+      load_fail:          "（記憶似乎有些模糊，無法載入此篇章…請嘗試重新整理頁面）",
 
       // ── Popup ──────────────────────────────────────────────────────
       popup_h1:           "墨水日記 · Ink Diary",
@@ -77,6 +79,8 @@
       ink_waiting:        "Ink is gathering on the parchment…",
       no_echo:            "(The page returned no echo this time… try again?)",
       no_editor:          "(The page cannot reach the ink pool below… please ensure a conversation is open)",
+      insert_fail:        "(The page cannot write your ink into the box beneath… refresh the page or type directly)",
+      load_fail:          "(The memories seem blurred — this chapter could not be loaded… try refreshing the page)",
 
       // ── Popup ──────────────────────────────────────────────────────
       popup_h1:           "墨水日記 · Ink Diary",

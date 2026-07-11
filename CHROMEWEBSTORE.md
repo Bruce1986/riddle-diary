@@ -35,7 +35,7 @@
 2. 開啟或新建一個對話，日記本介面便會自動覆蓋顯示。
 3. 在頁面底部直接落筆輸入文字，按下 Enter 送出，Shift + Enter 換行。
 4. 若要暫時查看原始介面，請長按右上角的「窺視」按鈕。
-5. 點擊右上角的「闔上」可暫時關閉此主題；您可以從 Chrome 工具列的擴充功能圖示重新開啟。
+5. 點擊右上角的「闔上」可暫時關閉此主題；關閉後右下角會浮出小書本「翻回日記」按鈕，點一下即可翻回（也可從 Chrome 工具列的擴充功能圖示重新開啟）。
 
 隱私說明：
 本擴充功能完全在本地運作，不包含任何對外連線代碼（無 fetch、XMLHttpRequest 等）。我們不會蒐集、儲存或傳送您的任何個人資料、對話內容或使用數據。您的所有設定皆保存在您的本地瀏覽器中。
@@ -89,7 +89,7 @@ How to use:
 2. Open or start a conversation — the diary interface will appear automatically.
 3. Write in the text area at the bottom; press Enter to send, Shift+Enter for a new line.
 4. To view the original interface temporarily, hold the "Peek" button in the top-right corner.
-5. Click "Close" in the top-right to dismiss the theme; reopen it anytime from the Chrome toolbar extension icon.
+5. Click "Close" in the top-right to dismiss the theme; a small floating book button appears at the bottom-right to bring it back with one click (or reopen it from the Chrome toolbar extension icon).
 
 Privacy:
 This extension operates entirely locally. It contains no outbound network requests (no fetch, XMLHttpRequest, WebSocket, or any other form of external communication). We collect, store, and transmit none of your personal data, conversation content, or usage metrics. All preferences are saved in your local browser storage.
