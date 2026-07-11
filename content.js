@@ -232,10 +232,14 @@
   // ── 翻回日記按鈕（overlay 隱藏 / 停用時的浮動入口） ─────────────────
   // 刻意 append 到 documentElement（在 overlay 之外），這樣 overlay 被
   // rd-hidden 隱藏時，此按鈕仍可見；overlay 顯示時由 updateReopenVisibility 隱藏。
+  let reopenBtn = null; // 本世代建立的翻回按鈕；getElementById 撈得到但此變數為 null＝擴充重載前的殘留
   function ensureReopenButton() {
-    let btn = document.getElementById("rd-reopen");
-    if (btn) return btn;
-    btn = document.createElement("button");
+    if (reopenBtn && reopenBtn.isConnected) return reopenBtn;
+    // 擴充重載後殘留的舊按鈕：click handler 綁在已死世代的 closure（extValid()=false、
+    // safeStorageSet 靜默 no-op），按了沒反應——比照 #rd-overlay/#rd-fontface 先清再重建。
+    const stale = document.getElementById("rd-reopen");
+    if (stale) stale.remove();
+    let btn = document.createElement("button");
     btn.id = "rd-reopen";
     btn.setAttribute("data-i18n-title", "reopen_hint");
     btn.setAttribute("data-i18n", "reopen_hint");
@@ -265,6 +269,7 @@
       updateReopenVisibility();
     });
     document.documentElement.appendChild(btn);
+    reopenBtn = btn;
     return btn;
   }
   function updateReopenVisibility() {
