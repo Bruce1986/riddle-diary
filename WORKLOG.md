@@ -72,6 +72,9 @@ v0.4.0 分支開發早於 main 上多輪 review 加固；合併時以 `--ours` �
 - Opus tracer 抓到 .cjs 殘留的**原始碼註解**版（四輪 doc sweep 都只掃 .md）：content.js 載入順序註解（:6-9）與 registry.js 自我描述（:1-4）共 6 處已改 .js。MV3 會拒載 .cjs content script，照舊註解加平台檔會重蹈 09be4b8 的無聲失效。
 - Codex 重提 cleanText in-memory 走訪（見下方定案備忘，維持不採用）。
 
+#### 收斂（2026-07-12）
+R9-R13：r10/r11 僅剩 TODO 檔 .cjs 殘留與標註格式 nit（已修、該類別做過機械式全量封閉）；R12 Opus tracer（三條高風險 flow 端到端追蹤）與 R13 最終關卡連續兩輪 clean → **fix-loop 收斂**。共 13 輪、61 條 finding 全數處理（3 high 類：CI lint gate、SPA 首訊回應遺失、store 文案無 hedge；主體為 --ours merge 輾掉的 21 條 main 加固回歸）。123 測試全過、lint 綠、打包 zip 乾淨。**Merge 前必做**：三站 live 手測（換頁、首訊轉址、闔上/翻回、窺視、長回覆、串流中載入）——content.js 的 SPA/DOM 行為無單元測試覆蓋。
+
 #### 定案備忘：cleanText 不移植 main 的 in-memory 走訪（R4 定案、R8 Codex 重提，維持不採用）
 main 的純記憶體走訪（避免 innerText 強制 layout）只在 claude.ai（單平台）live 驗證過；v0.4.0 要吃三平台的未知 DOM 結構，innerText-on-pre-wrap 的文字抽取語意較保險。已以 WeakMap 快取把重複呼叫成本壓到每節點一次；renderExisting 首次載入的 per-message 強制 layout 屬一次性成本。效能優化（含 in-memory 走訪移植）留待 T4-E live QA 有實測數據再決定——屆時請一併驗證換行/空白抽取在三平台的等價性。
 
