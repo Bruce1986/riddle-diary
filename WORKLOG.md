@@ -57,3 +57,11 @@ UMD 包裝（`if (typeof module !== "undefined" && module.exports) module.export
 - 事前預測落空（實際 1 high・3 medium）：**第三條 SPA 回歸**——導航離開對話頁（/chat/x → /settings）時 main 會把 overlay 加 rd-hidden 並 resetState，v0.4.0 重寫時同樣遺失，結果日記全螢幕蓋死設定頁、startIntro 還在上面跑動畫。已補回隱藏分支＋「自動隱藏（仍 enabled）回到對話頁自動重現」分支，保留翻回按鈕與 busy guard 語意。※ content.js 的 SPA 行為無單元測試覆蓋，此類修正屬 unvalidated-by-tests，合併前建議 live 手測三站換頁。
 - README 權限表中英兩處補列 `web_accessible_resources: icons/*`（manifest 有宣告、content.js:239 翻回按鈕在用，表格卻宣稱「這就是全部」）。
 - licenses/README.md 的 jf7000 開放疑問與 TODO-chromewebstore-launch §S4 的「已排除」結論矛盾——已依 S4 結論更新（jf7000 為字集規格，CC BY-SA 只管規格文件，字型本體 OFL 1.1）。
+
+#### R3+R4 補充（2026-07-12）——根因確立：merge 49e8bb8 用 `--ours` 輾掉 main 的加固
+v0.4.0 分支開發早於 main 上多輪 review 加固；合併時以 `--ours` 解衝突、誤以為「HEAD 是 main 的自然超集」，把 main 中有理由註解的保護整批清掉。本兩輪以 origin/main 為對照逐條驗證後補回 **16 條**（多數帶回 main 原註解）：
+- **R3（6 條）**：停用路徑（popup toggle／闔上鈕）resetState 後未重啟 URL 監看＋stale 翻回鈕可把 overlay 蓋到非對話頁（補 onOverlayPath guard ×3 與 watchUrlChanges 重啟 ×2）；sendToClaude insertText 失敗恢復 fail-fast（不再合成 beforeinput 假成功）＋startTurn 失敗同步重置 busy/佇列＋no_editor 竞态修正；startIntro 補回 lastRenderedNodes staleness 檢查；載入輪詢 24→50 tries、逾時改明確 load_fail 訊息（新增 i18n key）；outermost() 去巢狀（responseNodes/renderExisting）；openBook 防連點（openBookTimer 進 resetState）。
+- **R4（10 條，Opus tracer 驗證全數成立）**：watchResponse 兩處逾時補回 `!streaming`（思考型模型 66 秒被誤判、長生成 2 分鐘被腰斬）；diary.css 補回 `.rd-line{white-space:pre-wrap}`（多段落/列表被擠成一行——merge 在 css 唯一輾掉的規則）；窺視鈕整組防護（opacity+pointer-events、右鍵 guard、window blur 還原、鍵盤支援）；submit 先驗 editor 再清輸入框（不吞字）；buildOverlay/injectFonts 清擴充重載殘留（防雙層 overlay）；trackIfStreaming 整函式移植（串流中載入的對話完成後重渲染）；finish 後 pen.focus()（防輸入打進底層編輯器）；selectAll → Selection API（防誤選整頁）；歷史標題去重 regex 恢復 \s+（「哈哈哈哈」不誤切）；ink 分批浮現＋動畫後合併 span、cleanText WeakMap 快取（效能）。
+- 新增 i18n key：insert_fail、load_fail（zh_TW/en 同步，字典 30 keys）。文件行數描述改為抗漂移寫法（以 wc -l 為準）。
+- 驗證：123 測試全過、lint 綠。※ content.js 的 SPA/DOM 行為無單元測試，本兩輪 16 條移植均屬 unvalidated-by-tests——**merge 前務必三站 live 手測**（換頁、首訊轉址、闔上/翻回、窺視、長回覆、串流中載入）。
+- 校準記錄：R3 事前預測「≤1 medium、0 high」落空（實際 R3 6 條、R4 10 條）——低估了 `--ours` merge 的系統性影響；教訓＝發現一條「重寫遺失」時要立刻假設同類還有一批，先做全量對照掃描再預測。

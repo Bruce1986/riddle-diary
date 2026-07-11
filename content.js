@@ -77,6 +77,7 @@
   let reloadTimer = null; // SPA 換頁後延遲重載
   let urlWatchId = null; // watchUrlChanges 的輪詢（模組作用域，resetState 可清除）
   let openBookTimer = null; // 開書動畫的計時器：防連點重複 startIntro，resetState 一併清
+  let trackStreamingTimer = null; // 載入串流中對話的追蹤輪詢（獨立於 activeResponseTimer，避免互清）
   // 上次渲染的 DOM 節點實例集合，用於偵測 SPA 換頁是否已換新：比字串指紋更精準——
   // 即使新舊對話文字完全相同，React 重掛載出的也是全新節點實例，故能「零延遲」分辨。
   let lastRenderedNodes = new Set();
@@ -193,6 +194,8 @@
       return; // context 失效，改用系統字型 fallback
     }
     fontsInjected = true;
+    const staleFont = document.getElementById("rd-fontface"); // 擴充重載殘留的舊字型樣式 → 先清
+    if (staleFont) staleFont.remove();
     const style = document.createElement("style");
     style.id = "rd-fontface";
     style.textContent =
@@ -304,6 +307,7 @@
     if (introPoll) { clearInterval(introPoll); introPoll = null; }
     if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
     if (openBookTimer) { clearTimeout(openBookTimer); openBookTimer = null; }
+    if (trackStreamingTimer) { clearInterval(trackStreamingTimer); trackStreamingTimer = null; }
     if (urlWatchId) { clearInterval(urlWatchId); urlWatchId = null; }
     busy = false;
     queued.length = 0;
@@ -392,6 +396,10 @@
   // ── 介面 ────────────────────────────────────────────────────────
   function buildOverlay() {
     if (overlay) return;
+    // 擴充重載後，舊 content script 的 context 死了但它建立的節點還在頁面上；
+    // 新腳本的 overlay 變數為 null，若不先清掉舊節點會重複疊一層、事件重複綁定。
+    const stale = document.getElementById("rd-overlay");
+    if (stale) stale.remove();
     injectFonts();
     overlay = document.createElement("div");
     overlay.id = "rd-overlay";
@@ -471,16 +479,42 @@
       updateReopenVisibility(); // 顯示翻回日記浮動按鈕
     });
 
-    // 「窺視」：按住可看底層 Claude，放開即恢復。
-    // 放開事件必須掛在 window —— overlay 被設成 visibility:hidden 後，按鈕本身收不到 pointerup。
+    // 「窺視」：按住可看底層對話頁，放開即恢復。用 opacity:0 + pointer-events:none 隱藏，
+    // 不用 visibility:hidden——它會讓聚焦中的按鈕 blur，鍵盤按住時立刻觸發下方 blur 還原而閃爍。
+    // pointer-events:none 後按鈕本身收不到 pointerup，放開事件改掛在 window。
     const peek = overlay.querySelector("#rd-peek");
+    const peekShow = () => {
+      overlay.style.opacity = "0";
+      overlay.style.pointerEvents = "none";
+    };
+    const peekRestore = () => {
+      overlay.style.opacity = "";
+      overlay.style.pointerEvents = "";
+      // 三個監聽互斥（只會觸發其一），用 once 會殘留另外兩個 → 手動全部移除，避免事件監聽洩漏
+      window.removeEventListener("pointerup", peekRestore);
+      window.removeEventListener("pointercancel", peekRestore);
+      window.removeEventListener("blur", peekRestore);
+    };
     peek.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return; // 只允許滑鼠左鍵／觸控；右鍵會跳出選單干擾 pointerup 還原，導致永久隱藏
       e.preventDefault();
-      overlay.style.visibility = "hidden";
-      const restore = () => (overlay.style.visibility = "visible");
-      window.addEventListener("pointerup", restore, { once: true });
-      window.addEventListener("pointercancel", restore, { once: true });
+      peekShow();
+      window.addEventListener("pointerup", peekRestore);
+      window.addEventListener("pointercancel", peekRestore);
+      // 視窗失焦（切分頁/alt-tab，或在視窗外放開滑鼠）時 pointerup 可能不在 window 觸發 → 一併還原，避免永久隱藏
+      window.addEventListener("blur", peekRestore);
     });
+    // 鍵盤／螢幕閱讀器：按住 Space/Enter 看一眼，放開或失焦即恢復
+    peek.addEventListener("keydown", (e) => {
+      if (e.key === " " || e.key === "Enter") {
+        e.preventDefault(); // 避免 Space 捲動頁面、Enter 觸發 click
+        peekShow();
+      }
+    });
+    peek.addEventListener("keyup", (e) => {
+      if (e.key === " " || e.key === "Enter") peekRestore();
+    });
+    peek.addEventListener("blur", peekRestore); // 按住時 Tab 離開仍能恢復
 
     // 書籤 ↔ 歷史面板
     const bookmark = overlay.querySelector("#rd-bookmark");
@@ -543,6 +577,7 @@
           introPoll = null;
           renderExisting(nodes);
           if (pen) pen.focus();
+          trackIfStreaming(); // 若載入時對話仍在串流，追蹤到完成後重新整段渲染
         } else if (tries > MAX_TRIES) {
           clearInterval(introPoll);
           introPoll = null;
@@ -580,6 +615,33 @@
     lastRenderedNodes = new Set(nodes);
   }
 
+  // 若載入既有對話時平台仍在串流，追蹤到串流結束後「重新整段渲染」（取得最終乾淨內文、避免重複）。
+  // 用獨立的 trackStreamingTimer（不與 watchResponse 共用 activeResponseTimer），避免兩者互相覆蓋／誤清；
+  // 換頁/闔上時 resetState() 同樣會一併清掉。
+  function trackIfStreaming() {
+    if (trackStreamingTimer) { clearInterval(trackStreamingTimer); trackStreamingTimer = null; } // 重入保護
+    if (!document.querySelector(SELECTORS.stopBtn)) return; // 沒在串流就不用追
+    let stable = 0;
+    let last = "";
+    trackStreamingTimer = setInterval(() => {
+      if (!extValid() || !overlay || overlay.classList.contains("rd-hidden")) {
+        clearInterval(trackStreamingTimer);
+        trackStreamingTimer = null;
+        return;
+      }
+      const streaming = !!document.querySelector(SELECTORS.stopBtn);
+      const cur = latestResponseText();
+      if (cur !== last) { last = cur; stable = 0; } else stable++;
+      if (!streaming && stable >= 3) {
+        clearInterval(trackStreamingTimer);
+        trackStreamingTimer = null;
+        renderExisting(
+          document.querySelectorAll(SELECTORS.userMsg + "," + SELECTORS.response)
+        );
+      }
+    }, 400);
+  }
+
   // ── 歷史篇章（書籤翻頁） ────────────────────────────────────────
   function toggleHistory(force) {
     const open = force === undefined ? !overlay.classList.contains("rd-hist-open") : force;
@@ -610,7 +672,8 @@
       }
       if (!title) return;
       // 後備：剝除後若仍出現「整段重複兩次」（可見 + 無障礙複本）才砍半
-      const dup = title.match(/^(.{2,}?)\s*\1$/);
+      // 兩半之間必須有空白（\s+）才視為無障礙重複標題；\s* 會把「哈哈哈哈」誤切成「哈哈」
+      const dup = title.match(/^(.{2,}?)\s+\1$/);
       if (dup) title = dup[1].trim();
       if (title.length > 40) title = title.slice(0, 40) + "…";
       seen.add(href);
@@ -667,16 +730,23 @@
     feed.appendChild(line);
     const spans = line.querySelectorAll("span");
     const step = cls === "rd-me" ? 26 : 65;
+    // 長文分批浮現：每 tick 顯示 batch 個字，把總 tick 數壓在 ~120 以內，
+    // 避免超長回覆產生數千個 setTimeout／重排造成卡頓（短文 batch=1，視覺不變）。
+    const batch = Math.max(1, Math.ceil(spans.length / 120));
     let i = 0;
     (function reveal() {
       if (!line.isConnected) return; // 節點已被移除（如換頁清空 feed）→ 停止，避免孤兒計時器
       if (i < spans.length) {
-        spans[i].style.opacity = 1;
-        i++;
+        for (let n = 0; n < batch && i < spans.length; n++, i++) {
+          spans[i].style.opacity = 1;
+        }
         feed.scrollTop = feed.scrollHeight;
         setTimeout(reveal, step);
-      } else if (done) {
-        setTimeout(done, 400);
+      } else {
+        // 動畫結束後把上百個帶 transition 的 span 合併回純文字，釋放 DOM／記憶體，
+        // 避免長對話累積數千個節點造成捲動與後續渲染卡頓（已淡入完成，視覺不變）。
+        setTimeout(() => { if (line.isConnected) line.textContent = text; }, 500);
+        if (done) setTimeout(done, 400);
       }
     })();
     return line;
@@ -703,9 +773,15 @@
     return outermost(document.querySelectorAll(SELECTORS.response));
   }
 
+  // cleanText 結果快取：streaming 期間每秒被呼叫多次、renderExisting 逐節點呼叫，
+  // 以節點實例＋當下 textContent 為鍵，內容沒變就不重跑 clone/reflow。
+  const cleanTextCache = new WeakMap();
   // 擷取節點的乾淨內文：剔除無障礙標籤、按鈕、思考區塊
   function cleanText(node) {
     if (!node) return "";
+    const srcNow = node.textContent || "";
+    const hit = cleanTextCache.get(node);
+    if (hit && hit.src === srcNow) return hit.out;
     const clone = node.cloneNode(true);
     clone.querySelectorAll(SELECTORS.noise).forEach((el) => el.remove());
     if (!rdTextHolder || !rdTextHolder.isConnected) {
@@ -722,6 +798,7 @@
     let text = (clone.innerText || "").replace(/ /g, " ").trim();
     rdTextHolder.replaceChildren();
     text = text.replace(/^(Claude|ChatGPT|Gemini|Assistant|Model)\s+(responded|said)\s*:?\s*|^You\s+said\s*:?\s*/i, "");
+    cleanTextCache.set(node, { src: srcNow, out: text });
     return text;
   }
   function latestResponseText() {
@@ -733,13 +810,14 @@
   function submit(raw) {
     const pen = overlay.querySelector("#rd-pen");
     const text = (raw || "").trim();
-    pen.value = "";
-    pen.style.height = "auto";
-    if (!text) return;
-    if (!document.querySelector(SELECTORS.editor)) {
+    // 先驗證底層編輯器存在再清空輸入框：頁面異常時保留使用者辛苦打的字，不被吞掉。
+    if (text && !document.querySelector(SELECTORS.editor)) {
       ink(t("no_editor"), "rd-diary");
       return;
     }
+    pen.value = "";
+    pen.style.height = "auto";
+    if (!text) return;
     if (busy) {
       queued.push(text);
       return;
@@ -785,8 +863,16 @@
     ed.focus();
     let inserted = false;
     try {
-      document.execCommand("selectAll", false, null);
-      inserted = document.execCommand("insertText", false, text);
+      // 用 Selection API 精確選取「編輯器內部」的內容再覆寫，避免 execCommand("selectAll")
+      // 在 ed 尚未成為 activeElement 時誤選整頁、被 insertText 取代而造成畫面崩潰。
+      const sel = window.getSelection();
+      if (sel) { // getSelection 在極端情境（失焦、特殊 context）可能回 null，防禦性檢查
+        const range = document.createRange();
+        range.selectNodeContents(ed);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        inserted = document.execCommand("insertText", false, text);
+      }
     } catch (e) {
       inserted = false;
     }
@@ -853,7 +939,9 @@
       const cur = latestResponseText();
       const grew = responseNodes().length > baseline;
       if (!cur || (cur === prev && !grew)) {
-        if (ticks > 220) return finish(timer, waiting, null);
+        // 只有在「非串流」時才判逾時：思考型模型的思考區塊被雜訊過濾後 cur 可能為空，
+        // 但 stopBtn 仍在＝還在生成，不能誤判為無回應。
+        if (ticks > 220 && !streaming) return finish(timer, waiting, null);
         return;
       }
       if (cur !== lastText) {
@@ -865,7 +953,8 @@
 
       const done = !streaming && (sawStreaming ? stableTicks >= 3 : stableTicks >= 8);
       if (done) return finish(timer, waiting, lastText);
-      if (ticks > 400) return finish(timer, waiting, lastText);
+      // 安全網逾時同樣只在非串流時觸發，否則長文本生成會被中途截斷。
+      if (ticks > 400 && !streaming) return finish(timer, waiting, lastText);
     }, 300);
     activeResponseTimer = timer;
   }
@@ -878,7 +967,12 @@
       busy = false;
       if (queued.length) return startTurn(queued.shift());
       const pen = overlay && overlay.querySelector("#rd-pen");
-      if (pen) pen.placeholder = t("pen_placeholder");
+      if (pen) {
+        pen.placeholder = t("pen_placeholder");
+        // sendToClaude 期間焦點被移到底層編輯器；回完後搶回日記輸入框，
+        // 否則使用者後續輸入會打進隱藏的底層編輯器，且 Enter 可能誤送。
+        pen.focus();
+      }
     };
     ink(text || t("no_echo"), "rd-diary", after);
   }

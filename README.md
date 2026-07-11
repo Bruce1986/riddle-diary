@@ -29,7 +29,7 @@ You write on the page, it relays your words to your already‑logged‑in AI, an
 This project is built to be **verifiable, not just "trust me."** Both Taiwanese and international users should be able to confirm it is safe.
 
 - **No servers of ours.** The extension talks to nothing we operate. There is **no backend, no analytics, no telemetry, no data collection**.
-- **No network calls in the code.** `content.js` (~830 lines) contains **zero** `fetch`, `XMLHttpRequest`, `WebSocket`, or `sendBeacon`. Verify it yourself:
+- **No network calls in the code.** `content.js` (~1000 lines — run `wc -l content.js` for the current figure) contains **zero** `fetch`, `XMLHttpRequest`, `WebSocket`, or `sendBeacon`. Verify it yourself:
   ```bash
   grep -nE "fetch\(|XMLHttpRequest|WebSocket|sendBeacon" content.js   # → nothing
   ```
@@ -60,7 +60,7 @@ That is the complete list. There is no `tabs`, `cookies`, `webRequest`, `<all_ur
 grep -rnE "fetch\(|XMLHttpRequest|WebSocket|sendBeacon" content.js popup.js platforms/ i18n/
 # 2. See exactly which hosts/resources are declared
 cat manifest.json
-# 3. Read the whole thing — content.js is ~830 lines, plus the small platform/i18n configs
+# 3. Read the whole thing — one content.js plus the small platform/i18n configs
 less content.js platforms/*.js i18n/*.js
 ```
 
@@ -106,7 +106,7 @@ Code: **MIT** — see [`LICENSE`](LICENSE). Bundled fonts keep their own OSS lic
 這個專案的設計原則是「**可以自己驗證，而不是叫你相信我**」。台灣使用者與外國使用者都應該能自行確認它是安全的。
 
 - **沒有我們的伺服器。** 擴充不會跟任何我們經營的服務通訊。**沒有後端、沒有分析、沒有遙測、不蒐集任何資料**。
-- **程式碼裡沒有任何對外連線。** `content.js`（約 830 行）裡 **完全沒有** `fetch`、`XMLHttpRequest`、`WebSocket`、`sendBeacon`。你可以自己驗：
+- **程式碼裡沒有任何對外連線。** `content.js`（約 1000 行——實際行數以 `wc -l content.js` 為準）裡 **完全沒有** `fetch`、`XMLHttpRequest`、`WebSocket`、`sendBeacon`。你可以自己驗：
   ```bash
   grep -nE "fetch\(|XMLHttpRequest|WebSocket|sendBeacon" content.js   # → 什麼都沒有
   ```
@@ -137,7 +137,7 @@ Code: **MIT** — see [`LICENSE`](LICENSE). Bundled fonts keep their own OSS lic
 grep -rnE "fetch\(|XMLHttpRequest|WebSocket|sendBeacon" content.js popup.js platforms/ i18n/
 # 2. 看清楚宣告了哪些網域／資源
 cat manifest.json
-# 3. 整份讀過 —— content.js 約 830 行，外加小型平台與 i18n 設定檔
+# 3. 整份讀過 —— 一支 content.js，外加小型平台與 i18n 設定檔
 less content.js platforms/*.js i18n/*.js
 ```
 
