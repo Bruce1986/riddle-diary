@@ -11,19 +11,19 @@ Bruce 決策：完整賣點「一個擴充 · 三大 AI · 同款魔法日記體
 
 ## 架構前提（T0 早已備好）
 
-- `platforms/registry.cjs` 是 data-driven：新平台只要自我掛載到 `globalThis.RiddleDiary.platforms.<key>` 且宣告 `domains` 陣列，registry 就會自動比對 hostname
+- `platforms/registry.js` 是 data-driven：新平台只要自我掛載到 `globalThis.RiddleDiary.platforms.<key>` 且宣告 `domains` 陣列，registry 就會自動比對 hostname
 - `content.js` 只吃 `PLATFORM.selectors` 抽象介面——新平台補齊 selectors，覆蓋層邏輯不動
-- `i18n.cjs` 已支援 bilingual persona，新平台的 persona 也走 `personaLocales: { zh_TW, en }` 同一機制
+- `i18n.js` 已支援 bilingual persona，新平台的 persona 也走 `personaLocales: { zh_TW, en }` 同一機制
 
 ## 任務清單
 
 ### T4-A — 平台檔案 ✅ agent
-新增 `platforms/chatgpt.cjs` 與 `platforms/gemini.cjs`，各自宣告 `domains`、`selectors`、`personaLocales`、`isOverlayPath`、`isExistingConversationPath`。Persona 沿用「墨水日記」通用魔法日記口吻（不特別客製給該平台，維持品牌一致）。
+新增 `platforms/chatgpt.js` 與 `platforms/gemini.js`，各自宣告 `domains`、`selectors`、`personaLocales`、`isOverlayPath`、`isExistingConversationPath`。Persona 沿用「墨水日記」通用魔法日記口吻（不特別客製給該平台，維持品牌一致）。
 
 ### T4-B — Manifest & 版號 ✅ agent
 - `manifest.json` version 0.3.1 → **0.4.0**
 - `content_scripts.matches` 加 `https://chatgpt.com/*`、`https://chat.openai.com/*`、`https://gemini.google.com/*`
-- `content_scripts.js` 加 `platforms/chatgpt.cjs`、`platforms/gemini.cjs`（順序：registry → 全部平台 → i18n → content）
+- `content_scripts.js` 加 `platforms/chatgpt.js`、`platforms/gemini.js`（順序：registry → 全部平台 → i18n → content）
 - `package.json` version 同步 0.4.0
 - Chrome 對更多 host permission 會較嚴審——保留最小權限，只加這三個 origin
 
@@ -33,9 +33,9 @@ Bruce 決策：完整賣點「一個擴充 · 三大 AI · 同款魔法日記體
 - `project-handbook.md`：T4 標 ✅
 
 ### T4-D — 測試 ✅ agent
-- 既有 `tests/platforms.test.cjs` schema 測試會自動涵蓋新平台
-- 補 `tests/platforms.test.cjs` 或另檔：`isOverlayPath` / `isExistingConversationPath` 每平台 3–5 case
-- `tests/manifest-load.test.cjs`：驗證新平台檔案有在 manifest 且按預期順序載入
+- 既有 `tests/platforms.test.js` schema 測試會自動涵蓋新平台
+- 補 `tests/platforms.test.js` 或另檔：`isOverlayPath` / `isExistingConversationPath` 每平台 3–5 case
+- `tests/manifest-load.test.js`：驗證新平台檔案有在 manifest 且按預期順序載入
 - 全 suite 應仍 100% pass
 
 ### T4-E — Live selector 驗證 ⛔ Bruce（agent 無法代勞）
