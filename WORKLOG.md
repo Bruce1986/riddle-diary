@@ -64,4 +64,8 @@ v0.4.0 分支開發早於 main 上多輪 review 加固；合併時以 `--ours` �
 - **R4（10 條，Opus tracer 驗證全數成立）**：watchResponse 兩處逾時補回 `!streaming`（思考型模型 66 秒被誤判、長生成 2 分鐘被腰斬）；diary.css 補回 `.rd-line{white-space:pre-wrap}`（多段落/列表被擠成一行——merge 在 css 唯一輾掉的規則）；窺視鈕整組防護（opacity+pointer-events、右鍵 guard、window blur 還原、鍵盤支援）；submit 先驗 editor 再清輸入框（不吞字）；buildOverlay/injectFonts 清擴充重載殘留（防雙層 overlay）；trackIfStreaming 整函式移植（串流中載入的對話完成後重渲染）；finish 後 pen.focus()（防輸入打進底層編輯器）；selectAll → Selection API（防誤選整頁）；歷史標題去重 regex 恢復 \s+（「哈哈哈哈」不誤切）；ink 分批浮現＋動畫後合併 span、cleanText WeakMap 快取（效能）。
 - 新增 i18n key：insert_fail、load_fail（zh_TW/en 同步，字典 30 keys）。文件行數描述改為抗漂移寫法（以 wc -l 為準）。
 - 驗證：123 測試全過、lint 綠。※ content.js 的 SPA/DOM 行為無單元測試，本兩輪 16 條移植均屬 unvalidated-by-tests——**merge 前務必三站 live 手測**（換頁、首訊轉址、闔上/翻回、窺視、長回覆、串流中載入）。
+#### R5+R6 補充（2026-07-12）
+- R5：翻回鈕 #rd-reopen 補「擴充重載殘留清理」（同 #rd-overlay/#rd-fontface 第三例，改用模組變數區分本世代）；TODO 維護備忘 .cjs→.js ×3＋selectors 大小寫＋功能 2 完成式；WORKLOG 簡體「竞态」勘誤為「競態」。
+- R6：Claude 綜合審查 clean；Codex 交叉查核抓到**跨輪移植接縫**——r3 移植 staleness 檢查但 main 配套的 lastRenderedNodes 生命週期（四站點）沒跟上：同一對話闔上→翻回會被誤判 stale 空白等 ~15s。已補齊：watcher 離開對話頁清空、resetState 停用時清（含刻意不在 chat→chat 清的 Gemini-review 註解）、re-enable/翻回立即清、close 鈕同步設 state.enabled=false。教訓＝成套機制要一次移植完整生命週期，不能只搬用到的那半。
+
 - 校準記錄：R3 事前預測「≤1 medium、0 high」落空（實際 R3 6 條、R4 10 條）——低估了 `--ours` merge 的系統性影響；教訓＝發現一條「重寫遺失」時要立刻假設同類還有一批，先做全量對照掃描再預測。

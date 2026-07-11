@@ -132,6 +132,7 @@
             } else if (onOverlayPath()) { // 非對話頁則維持隱藏，不蓋住頁面
               overlay.classList.remove("rd-hidden");
               lastUrl = location.href;
+              lastRenderedNodes.clear(); // 重新啟用即是要立刻鋪上目前對話，不必等節點換新
               resetState();
               const feed = overlay.querySelector("#rd-feed");
               if (feed) feed.innerHTML = "";
@@ -260,6 +261,7 @@
       } else if (onOverlayPath()) { // 非對話頁不重現（stale 按鈕不得把 overlay 蓋到設定頁上）
         overlay.classList.remove("rd-hidden");
         lastUrl = location.href;
+        lastRenderedNodes.clear(); // 翻回即是要立刻鋪上目前對話，不必等節點換新
         resetState();
         const feed = overlay.querySelector("#rd-feed");
         if (feed) feed.innerHTML = "";
@@ -314,6 +316,9 @@
     if (openBookTimer) { clearTimeout(openBookTimer); openBookTimer = null; }
     if (trackStreamingTimer) { clearInterval(trackStreamingTimer); trackStreamingTimer = null; }
     if (urlWatchId) { clearInterval(urlWatchId); urlWatchId = null; }
+    // Gemini-review: 刻意「不」在此無條件清 lastRenderedNodes。chat→chat 切換時 resetState 會先跑，
+    // 清掉會讓 staleness 偵測失效；只有停用/闔上（enabled=false）時才清，重新翻回不必等節點換新。
+    if (!state.enabled) lastRenderedNodes.clear();
     busy = false;
     queued.length = 0;
     const pen = overlay && overlay.querySelector("#rd-pen");
@@ -342,6 +347,9 @@
         }
         return;
       }
+      // 離開對話頁（去 /new、/、/settings…）→ 清掉上次節點集合，釋放對 detached 節點的參照。
+      // 對話→對話直接切換時目的地仍是對話頁，不會清，stale 偵測照常運作。
+      if (!PLATFORM.isExistingConversationPath(location.pathname)) lastRenderedNodes.clear();
       // 導航到非 overlay 頁（/settings、/login…）→ 隱藏日記，別蓋住頁面
       if (!onOverlayPath()) {
         if (!overlay.classList.contains("rd-hidden")) {
@@ -476,6 +484,7 @@
     });
 
     overlay.querySelector("#rd-close").addEventListener("click", () => {
+      state.enabled = false; // 同步更新，讓 resetState 能據此清掉 lastRenderedNodes（storage 事件是非同步的）
       overlay.classList.add("rd-hidden"); // 直接隱藏，不依賴 storage 事件
       resetState(); // 清掉背景計時器，避免隱藏後還在空轉
       watchUrlChanges(); // resetState 清了 urlWatchId：闔上期間仍要監看路由，翻回按鈕才會跟著顯示/隱藏
