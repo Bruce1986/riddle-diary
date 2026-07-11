@@ -279,6 +279,9 @@
         ensureReopenButton();
         updateReopenVisibility();
       }
+      // 不論初始路由為何都立刻開始監看 SPA 換頁：否則初次落在非對話頁（如 /settings）時
+      // buildOverlay 不會被呼叫、監看永不啟動，導航回對話頁就再也建不起日記。
+      watchUrlChanges();
       bootComplete = true; // 初始化完成，允許 storage.onChanged 觸發重渲染
     });
   }
@@ -311,8 +314,33 @@
     urlWatchId = setInterval(() => {
       if (!extValid()) { clearInterval(urlWatchId); urlWatchId = null; return; } // 擴充重載後舊分頁 context 失效 → 停掉輪詢
       if (location.href === lastUrl) return;
+      const oldUrl = lastUrl;
       lastUrl = location.href; // 隨時更新；隱藏時切換對話的重載改由「重新啟用」時主動處理
-      if (!overlay || overlay.classList.contains("rd-hidden")) return;
+      // 初次落在非 overlay 路由時 overlay 尚未建立；導航進 overlay 路由就在此補建
+      // （監看已於 boot() 無條件開跑），與 boot() 的分支語意一致。
+      if (!overlay) {
+        if (state.enabled && onOverlayPath()) {
+          buildOverlay();
+        } else if (!state.enabled && onOverlayPath()) {
+          ensureReopenButton();
+          updateReopenVisibility();
+        }
+        return;
+      }
+      if (overlay.classList.contains("rd-hidden")) {
+        updateReopenVisibility(); // 闔上狀態下換頁：翻回按鈕跟著路由顯示/隱藏
+        return;
+      }
+      // 送出第一則訊息後，平台會把新對話從 / 或 /new 或 /app 重導到既有對話路徑。
+      // 若此時正忙（busy：第一則訊息的動畫/輪詢進行中），不要重置與清空畫面，
+      // 否則第一則回應的墨水書寫動畫會被打斷、凍成不再更新的靜態快照。
+      let wasNonConvo = true;
+      try {
+        wasNonConvo = !PLATFORM.isExistingConversationPath(new URL(oldUrl).pathname);
+      } catch (e) { /* oldUrl 異常時保守視為非對話頁 */ }
+      if (wasNonConvo && PLATFORM.isExistingConversationPath(location.pathname) && busy) {
+        return; // 維持同一回合：動畫與 watchResponse 繼續，lastUrl 已更新故不會重觸
+      }
       // 換對話了 → 先明確停掉目前這支 interval（防止 resetState 被呼叫後 ID 已被清空
       // 但 setInterval 回呼仍持續觸發的競態），再統一重置並重新啟動監聽。
       clearInterval(urlWatchId);

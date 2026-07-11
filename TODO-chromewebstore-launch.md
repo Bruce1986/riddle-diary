@@ -1,7 +1,7 @@
 # Chrome Web Store 上架工作單
 
 > Created: 2026-07-07
-> Target: v0.3.1 首次上架審查
+> Target: v0.4.0 三平台首次上架審查（送審前須過 T4-E live 驗證閘門，見 TODO-t4-multiplatform.md）
 > 主 spec: [CHROMEWEBSTORE.md](CHROMEWEBSTORE.md)
 > Roadmap: [TODO-20260619-1230.md](TODO-20260619-1230.md)
 

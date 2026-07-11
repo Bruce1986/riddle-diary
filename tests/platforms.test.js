@@ -3,6 +3,21 @@
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+
+// content.js 的 runtime 守衛刻意只做物件層級檢查，「每個必要鍵存在且非空」全權
+// 委派給這份清單——它是唯一防線，靠下方的「與 content.js 實際用法同步」測試保證不會漏鍵。
+const REQUIRED_SELECTOR_KEYS = [
+  "editor",
+  "sendBtn",
+  "stopBtn",
+  "response",
+  "userMsg",
+  "noise",
+  "historyItem",
+  "historyItemFallback",
+];
 
 // NOTE: this file intentionally loads platforms before registry to test bidirectional self-registration;
 // manifest-load.test.js covers the canonical registry-first order.
@@ -68,17 +83,7 @@ describe("平台 schema 完整性（動態走訪所有已註冊平台）", () =>
         const s = platform.selectors;
         assert.strictEqual(typeof s, "object");
         assert.ok(s !== null);
-        const requiredKeys = [
-          "editor",
-          "sendBtn",
-          "stopBtn",
-          "response",
-          "userMsg",
-          "noise",
-          "historyItem",
-          "historyItemFallback",
-        ];
-        for (const key of requiredKeys) {
+        for (const key of REQUIRED_SELECTOR_KEYS) {
           assert.strictEqual(typeof s[key], "string", `selectors.${key} 應為字串`);
           assert.ok(s[key].length > 0, `selectors.${key} 不應為空字串`);
         }
@@ -165,6 +170,57 @@ describe("registry.selectPlatform", () => {
     assert.strictEqual(selectPlatform(undefined), null);
     assert.strictEqual(selectPlatform(123), null);
     assert.strictEqual(selectPlatform(), null);
+  });
+
+  // 後綴仿冒防禦：比對必須是「完全相等或 '.' + domain 結尾」，
+  // 退化成裸 endsWith(domain) 時這三例會誤配 —— 守住 registry.js 的仿冒註解。
+  it("後綴仿冒 'evilclaude.ai' / 'notclaude.ai' / 'evilchatgpt.com' → 回傳 null", () => {
+    assert.strictEqual(selectPlatform("evilclaude.ai"), null);
+    assert.strictEqual(selectPlatform("notclaude.ai"), null);
+    assert.strictEqual(selectPlatform("evilchatgpt.com"), null);
+  });
+
+  // 畸形平台設定的 skip 分支：registry 對 domains 非陣列／空字串元素應跳過，
+  // 不丟例外、不誤配。暫時註冊畸形平台，finally 保證清除，不汙染其他測試。
+  it("畸形平台（domains 非陣列/空字串/undefined）→ 跳過不誤配、不丟例外", () => {
+    const platforms = globalThis.RiddleDiary.platforms;
+    try {
+      platforms.__badString = { id: "__badString", domains: "malformed.example" };
+      platforms.__badEmpty = { id: "__badEmpty", domains: ["", "   "] };
+      platforms.__badMissing = { id: "__badMissing" };
+      // domains 為字串時不得被 for...of 逐字迭代而誤配
+      assert.strictEqual(selectPlatform("malformed.example"), null);
+      // 空字串/純空白 domain 不得讓任意 host 誤配
+      assert.strictEqual(selectPlatform("anything.example"), null);
+      // 畸形平台在場時，正常平台仍照常選中且不丟例外
+      assert.strictEqual(selectPlatform("claude.ai").id, "claude");
+      assert.strictEqual(selectPlatform("gemini.google.com").id, "gemini");
+    } finally {
+      delete platforms.__badString;
+      delete platforms.__badEmpty;
+      delete platforms.__badMissing;
+    }
+  });
+});
+
+// ─── 2b. REQUIRED_SELECTOR_KEYS 與 content.js 實際用法同步 ────────────────
+// schema 測試的鍵清單是手寫的；這裡從 content.js 原始碼抽出實際消費的
+// SELECTORS.<key>，斷言為清單子集——content.js 新用一個鍵而清單沒跟上時，CI 會紅。
+
+describe("REQUIRED_SELECTOR_KEYS 與 content.js 實際用法同步", () => {
+  it("content.js 消費的每個 SELECTORS.<key> 都在 REQUIRED_SELECTOR_KEYS 中", () => {
+    const src = fs.readFileSync(path.resolve(__dirname, "../content.js"), "utf8");
+    const used = new Set();
+    for (const m of src.matchAll(/\bSELECTORS\.([A-Za-z_$][\w$]*)/g)) {
+      used.add(m[1]);
+    }
+    assert.ok(used.size > 0, "content.js 應至少消費一個 SELECTORS 鍵（抽取 regex 可能失效）");
+    for (const key of used) {
+      assert.ok(
+        REQUIRED_SELECTOR_KEYS.includes(key),
+        `content.js 用到 SELECTORS.${key}，但 schema 測試的 REQUIRED_SELECTOR_KEYS 未涵蓋——請把該鍵加進清單（並確認各平台設定都有提供）`
+      );
+    }
   });
 });
 

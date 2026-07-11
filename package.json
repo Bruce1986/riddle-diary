@@ -5,7 +5,7 @@
   "description": "把 AI 聊天介面化為一本神秘的墨水日記",
   "scripts": {
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
+    "fix": "eslint . --fix",
     "test": "node --test"
   },
   "devDependencies": {

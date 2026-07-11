@@ -15,6 +15,7 @@ rm -f "$OUTPUT"
 
 # Create ZIP excluding dev, test, and documentation files
 zip -r "$OUTPUT" . \
+  -x ".git" \
   -x ".git/*" \
   -x ".github/*" \
   -x ".gemini/*" \

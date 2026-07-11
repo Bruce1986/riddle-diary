@@ -19,8 +19,8 @@
 把 R3 產出的「墨」書法 mark 換成金色襯線「INK」（Baskerville / Trajan 感），維持深棕皮革 + 金框。128 / 48 / 16 三尺寸；16px 若「INK」三字母渲染太糊，允許降級為墨滴或單字母 "I" 圖徽。
 
 ### I2 — i18n 基礎設施 + 全面 refactor ✅ agent（Sonnet, 2026-07-07）
-新增 `i18n/messages.cjs`（雙語字典 20 keys）+ `i18n/i18n.cjs`（`resolveLocale` / `getMessage` / `initLocale` / `setLocale`）。`content.js` 全面走 `t(key)` + `data-i18n` attrs；`popup.html` 加 3-radio 語言選單；`storage.onChanged` listener 讓 in-page 即時切換。PERSONA 拆成雙語 object 由 locale 決定。
-建 `i18n/` 目錄含 messages dictionary + helper；重構 `content.js`、`popup.html`、`popup.js`、`platforms/claude.cjs` 的所有使用者可見字串走 `getMessage()`；PERSONA 拆成雙語 object；popup 加語言選單（3 radio buttons）；wire up `chrome.storage.sync` 儲存偏好 + `chrome.storage.onChanged` 讓 content.js 即時更新。
+新增 `i18n/messages.js`（雙語字典 28 keys；後續功能陸續加 key）+ `i18n/i18n.js`（`resolveLocale` / `getMessage` / `initLocale` / `setLocale`）。`content.js` 全面走 `t(key)` + `data-i18n` attrs；`popup.html` 加 3-radio 語言選單；`storage.onChanged` listener 讓 in-page 即時切換。PERSONA 拆成雙語 object 由 locale 決定。
+建 `i18n/` 目錄含 messages dictionary + helper；重構 `content.js`、`popup.html`、`popup.js`、`platforms/claude.js`（時名 .cjs）的所有使用者可見字串走 `getMessage()`；PERSONA 拆成雙語 object；popup 加語言選單（3 radio buttons）；wire up `chrome.storage.sync` 儲存偏好 + `chrome.storage.onChanged` 讓 content.js 即時更新。
 
 ### I3 — CHROMEWEBSTORE.md 英文版 store listing ✅（含在 I2）
 `CHROMEWEBSTORE.md` 新增 "## English Locale (en)" 區塊：Extension Name / Short Description (≤132) / Detailed Description / Single Purpose。

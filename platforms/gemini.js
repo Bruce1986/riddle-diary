@@ -73,8 +73,8 @@
     // 新對話的起始路徑（content.js 的「翻開新的一頁」按鈕使用）。
     newChatPath: "/app",
 
-    // Gemini 側邊欄歷史需展開，降級為 false 可停用歷史功能以避免空清單問題。
-    // 待實測後決定是否維持 true 或改為 false + 提示用戶手動展開側邊欄。
+    // Gemini 側邊欄歷史需展開；此旗標為 T4 預留欄位，content.js 目前尚未接線消費。
+    // 待 T4-E 實測後決定是否接線降級（false 停用歷史）或提示用戶手動展開側邊欄。
     features: {
       history: true,
     },

@@ -82,5 +82,5 @@ git commit -F COMMIT_EDITMSG
 
 - **純前端 Chrome 擴充（MV3），沒有 build**：本專案有 `package.json`，CI 會執行 `npm run lint`（ESLint v9）與 `npm test`（node:test）。DOM 橋接邏輯無法被單元測試覆蓋，修改後仍須「載入未封裝擴充 → 在 claude.ai 實測」（請在 PR 說明手動驗證步驟）。
 - **零對外請求**：兩款字型（`fonts/Tangerine-700.ttf`、`fonts/ChenYuluoyan-Thin.ttf`）皆本地打包、以 `chrome-extension://` 載入。**不要**改成從 CDN（jsdelivr / Google Fonts）載入——那會破壞「純本機」的隱私訴求，且 claude.ai 的 CSP `font-src` 也會擋下外部來源。
-- **claude.ai 會改版**：所有頁面 DOM 選擇器集中在 `platforms/claude.cjs` 的 `SELECTORS`（`content.js` 保留平台無關的覆蓋層邏輯）；介面失效時優先檢查／更新這裡。
+- **各平台會改版**：所有頁面 DOM 選擇器集中在 `platforms/*.js` 各平台設定檔的 `selectors`（`content.js` 經由 `PLATFORM` 設定取用平台細節）；介面失效時優先檢查／更新對應平台檔。
 - **不要引入任何網路請求**：`content.js` 刻意不含 `fetch` / `XMLHttpRequest` / `WebSocket` / `sendBeacon`。新增程式碼請維持此原則。

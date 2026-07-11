@@ -20,6 +20,8 @@
 • ChatGPT（chatgpt.com、chat.openai.com）
 • Gemini（gemini.google.com）
 
+※ 首發版本以 Claude 驗證最完整；ChatGPT 與 Gemini 的介面適配仍在持續實測中，若遇到無法送出或畫面異常，歡迎回報。
+
 主要功能：
 • 沉浸式手寫魔法日記視覺與墨水浮現動態特效。
 • 點擊書封翻開日記本，點擊「闔上」即可恢復原始 AI 介面。
@@ -72,6 +74,8 @@ Supported platforms:
 • ChatGPT (chatgpt.com, chat.openai.com)
 • Gemini (gemini.google.com)
 
+Note: this first release is most thoroughly verified on Claude; ChatGPT and Gemini interface support is still undergoing live verification — please report anything that fails to send or renders incorrectly.
+
 Features:
 • Immersive handwritten magical-diary visuals with ink-reveal animation effects.
 • Tap the book cover to open the diary; click "Close" to return to the original AI interface at any time.
@@ -96,7 +100,7 @@ This is an unofficial, fan-made visual reskin tool with no affiliation, authoriz
 **Single Purpose** [REQUIRED]
 Visually reskin Claude, ChatGPT, and Gemini conversation interfaces as an immersive handwritten magical diary, with ink-reveal animation effects.
 
-**Known Issues:** The extension relies on each platform's DOM structure (selectors). If Claude, ChatGPT, or Gemini significantly updates its frontend, the overlay may break until the corresponding `platforms/*.cjs` selectors are updated.
+**Known Issues:** The extension relies on each platform's DOM structure (selectors). If Claude, ChatGPT, or Gemini significantly updates its frontend, the overlay may break until the corresponding `platforms/*.js` selectors are updated.
 
 
 ## Graphics & Assets
@@ -180,7 +184,7 @@ https://github.com/bruce1986/riddle-diary/issues
 ## Review Notes
 
 ### Known Issues / Limitations
-- 由於此擴充功能高度依賴各平台的網頁 DOM 結構（Selectors），若 Claude.ai、ChatGPT 或 Gemini 進行前端架構大改版，本擴充功能的主題覆蓋可能會失效，需更新對應的 platforms/*.cjs 的 Selectors。
+- 由於此擴充功能高度依賴各平台的網頁 DOM 結構（Selectors），若 Claude.ai、ChatGPT 或 Gemini 進行前端架構大改版，本擴充功能的主題覆蓋可能會失效，需更新對應的 platforms/*.js 的 selectors。
 
 ### Rejection History
 （尚無）
