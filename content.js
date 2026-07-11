@@ -3,10 +3,10 @@
 (function () {
   "use strict";
 
-  // ── 平台設定（由 platforms/registry.cjs + 各平台檔在本腳本前載入） ──
-  // ── i18n（由 i18n/messages.cjs + i18n/i18n.cjs 在本腳本前載入） ──
+  // ── 平台設定（由 platforms/registry.js + 各平台檔在本腳本前載入） ──
+  // ── i18n（由 i18n/messages.js + i18n/i18n.js 在本腳本前載入） ──
   // manifest content_scripts.js 載入順序：
-  //   registry.cjs → platforms/claude.cjs → platforms/chatgpt.cjs → platforms/gemini.cjs → i18n/messages.cjs → i18n/i18n.cjs → content.js
+  //   platforms/registry.js → platforms/claude.js → platforms/chatgpt.js → platforms/gemini.js → i18n/messages.js → i18n/i18n.js → content.js
   const PLATFORM =
     globalThis.RiddleDiary &&
     typeof globalThis.RiddleDiary.selectPlatform === "function"

@@ -68,6 +68,10 @@ v0.4.0 分支開發早於 main 上多輪 review 加固；合併時以 `--ours` �
 - R5：翻回鈕 #rd-reopen 補「擴充重載殘留清理」（同 #rd-overlay/#rd-fontface 第三例，改用模組變數區分本世代）；TODO 維護備忘 .cjs→.js ×3＋selectors 大小寫＋功能 2 完成式；WORKLOG 簡體「竞态」勘誤為「競態」。
 - R6：Claude 綜合審查 clean；Codex 交叉查核抓到**跨輪移植接縫**——r3 移植 staleness 檢查但 main 配套的 lastRenderedNodes 生命週期（四站點）沒跟上：同一對話闔上→翻回會被誤判 stale 空白等 ~15s。已補齊：watcher 離開對話頁清空、resetState 停用時清（含刻意不在 chat→chat 清的 Gemini-review 註解）、re-enable/翻回立即清、close 鈕同步設 state.enabled=false。教訓＝成套機制要一次移植完整生命週期，不能只搬用到的那半。
 
+#### R8 補充（2026-07-12）
+- Opus tracer 抓到 .cjs 殘留的**原始碼註解**版（四輪 doc sweep 都只掃 .md）：content.js 載入順序註解（:6-9）與 registry.js 自我描述（:1-4）共 6 處已改 .js。MV3 會拒載 .cjs content script，照舊註解加平台檔會重蹈 09be4b8 的無聲失效。
+- Codex 重提 cleanText in-memory 走訪（見下方定案備忘，維持不採用）。
+
 #### 定案備忘：cleanText 不移植 main 的 in-memory 走訪（R4 定案、R8 Codex 重提，維持不採用）
 main 的純記憶體走訪（避免 innerText 強制 layout）只在 claude.ai（單平台）live 驗證過；v0.4.0 要吃三平台的未知 DOM 結構，innerText-on-pre-wrap 的文字抽取語意較保險。已以 WeakMap 快取把重複呼叫成本壓到每節點一次；renderExisting 首次載入的 per-message 強制 layout 屬一次性成本。效能優化（含 in-memory 走訪移植）留待 T4-E live QA 有實測數據再決定——屆時請一併驗證換行/空白抽取在三平台的等價性。
 
