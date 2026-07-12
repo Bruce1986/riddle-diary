@@ -57,7 +57,7 @@ export default [
 
   // 測試檔：Node.js 環境（package.json 移除 "type": "module" 後 .js 預設 CommonJS）
   {
-    files: ["tests/**/*.js"],
+    files: ["tests/**/*.js", "scripts/**/*.js"],
     ...js.configs.recommended,
     languageOptions: {
       ecmaVersion: 2020,
