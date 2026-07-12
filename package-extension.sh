@@ -22,6 +22,7 @@ zip -r "$OUTPUT" . \
   -x ".claude/*" \
   -x "node_modules/*" \
   -x "tests/*" \
+  -x "scripts/*" \
   -x "package.json" \
   -x "package-lock.json" \
   -x "eslint.config.js" \
