@@ -72,6 +72,13 @@ v0.4.0 分支開發早於 main 上多輪 review 加固；合併時以 `--ours` �
 - Opus tracer 抓到 .cjs 殘留的**原始碼註解**版（四輪 doc sweep 都只掃 .md）：content.js 載入順序註解（:6-9）與 registry.js 自我描述（:1-4）共 6 處已改 .js。MV3 會拒載 .cjs content script，照舊註解加平台檔會重蹈 09be4b8 的無聲失效。
 - Codex 重提 cleanText in-memory 走訪（見下方定案備忘，維持不採用）。
 
+#### 測試補課（2026-07-12，Bruce 指示）：SPA/DOM 行為單元測試＋突變驗證
+- 新增 `tests/helpers/content-harness.js`：jsdom（devDependency）＋ vm 依 manifest 順序載入全部 content script、假時鐘（tick 決定性推進，不 sleep）、chrome.* 同步 stub、claude.ai DOM 夾具——每測試全新隔離環境。
+- 新增 `tests/content-spa.test.js` 25 個測試：啟動/監看、SPA 換頁（含首訊轉址 busy 保護、hide-on-leave、自動重現、翻回按鈕跟路由、stale 按鈕防護）、闔上→翻回 staleness 生命週期、慢載容忍與載入逾時、fail-fast/吞字保護/!streaming 逾時×2/焦點搶回、outermost 去巢狀、開書防連點、重載殘留清理×2、窺視鈕防護、popup 開關。總測試數 123 → 148。
+- 新增 `scripts/mutation-check.js`（`npm run test:mutation`）：25 條目標式突變——逐一把 fix-loop 補回的保護改壞、確認測試轉紅。**25/25 killed**。過程發現兩處 lastRenderedNodes 顯式 clear 與 resetState 條件 clear 互為雙保險（單行突變倖存＝冗餘防禦、非漏洞），改以複合突變驗整組機制，並補列 watcher 離開對話頁 clear（獨立承重）之突變。
+- 初版測試曾有三個送出類測試靠「boot introPoll 尚未收攤」的非預期路徑通過——已改為先完成初始渲染再進使用者回合（突變驗證就是為了抓這種假綠）。
+- GEMINI.md「DOM 橋接無法被單元測試覆蓋」聲明同步更新。**jsdom ≠ 真站**：merge 前三站 live 手測仍必要（清單見上方收斂註記）。
+
 #### 收斂（2026-07-12）
 R9-R13：r10/r11 僅剩 TODO 檔 .cjs 殘留與標註格式 nit（已修、該類別做過機械式全量封閉）；R12 Opus tracer（三條高風險 flow 端到端追蹤）與 R13 最終關卡連續兩輪 clean → **fix-loop 收斂**。共 13 輪、61 條 finding 全數處理（3 high 類：CI lint gate、SPA 首訊回應遺失、store 文案無 hedge；主體為 --ours merge 輾掉的 21 條 main 加固回歸）。123 測試全過、lint 綠、打包 zip 乾淨。**Merge 前必做**：三站 live 手測（換頁、首訊轉址、闔上/翻回、窺視、長回覆、串流中載入）——content.js 的 SPA/DOM 行為無單元測試覆蓋。
 
