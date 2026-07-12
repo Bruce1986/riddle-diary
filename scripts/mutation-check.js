@@ -46,10 +46,15 @@ const MUTATIONS = [
     find: "      } else if (onOverlayPath()) { // 非對話頁不重現（stale 按鈕不得把 overlay 蓋到設定頁上）",
     replace: "      } else {",
   },
+  // 註：harness 的 chrome stub 有真 Chrome 的 self-echo 語意後，close 鈕的直接重啟與
+  // storage onChanged 分支的重啟互為雙保險（真 Chrome 亦然）——單拔一條會被 echo 補位，
+  // 故以複合突變驗整組機制。
   {
-    name: "闔上後不重啟 URL 監看（翻回按鈕不跟路由）",
-    find: "      watchUrlChanges(); // resetState 清了 urlWatchId：闔上期間仍要監看路由，翻回按鈕才會跟著顯示/隱藏",
-    replace: "",
+    name: "闔上後不重啟 URL 監看——直接與 echo 路徑整組失效（翻回按鈕不跟路由）",
+    edits: [
+      { find: "      watchUrlChanges(); // resetState 清了 urlWatchId：闔上期間仍要監看路由，翻回按鈕才會跟著顯示/隱藏\n", replace: "" },
+      { find: "            watchUrlChanges(); // resetState 清了 urlWatchId：停用期間仍要監看路由，翻回按鈕才會跟著顯示/隱藏\n", replace: "" },
+    ],
   },
   // 註：翻回／重新啟用的顯式 clear 與 resetState 的條件 clear 互為雙保險（main 原設計），
   // 單獨拔任一條會被另一條補位（單行突變會倖存＝冗餘防禦，非漏洞）。
@@ -59,6 +64,7 @@ const MUTATIONS = [
     edits: [
       { find: "        lastRenderedNodes.clear(); // 翻回即是要立刻鋪上目前對話，不必等節點換新\n", replace: "" },
       { find: "    if (!state.enabled) lastRenderedNodes.clear();\n", replace: "" },
+      { find: "              lastRenderedNodes.clear(); // 重新啟用即是要立刻鋪上目前對話，不必等節點換新\n", replace: "" },
     ],
   },
   {
