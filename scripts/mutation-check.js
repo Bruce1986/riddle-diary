@@ -162,6 +162,31 @@ const MUTATIONS = [
     replace: "",
   },
   {
+    name: "IME 組字守門移除（組字中 Enter 誤送出）",
+    find: "      if (e.isComposing || e.keyCode === 229) return;",
+    replace: "",
+  },
+  {
+    name: "Shift+Enter 守門移除（換行變誤送出）",
+    find: "      if (e.key === \"Enter\" && !e.shiftKey) {",
+    replace: "      if (e.key === \"Enter\") {",
+  },
+  {
+    name: "死送 120 拍逾時移除（busy 永遠卡住）",
+    find: "        else if (ticks > 120) return finish(timer, waiting, null);",
+    replace: "",
+  },
+  {
+    name: "trackIfStreaming 失效（載入中串流不再補渲染）",
+    find: "    if (!document.querySelector(SELECTORS.stopBtn)) return; // 沒在串流就不用追",
+    replace: "    return;",
+  },
+  {
+    name: "語言切換不重套字串（applyI18n 前的 setLocale 移除）",
+    find: "          _i18n.setLocale(_i18n.resolveLocale(changes.language.newValue, uiLang));",
+    replace: "",
+  },
+  {
     name: "歷史標題去重 regex 退化 \\s+ → \\s*（「哈哈哈哈」誤切）",
     find: "      const dup = title.match(/^(.{2,}?)\\s+\\1$/);",
     replace: "      const dup = title.match(/^(.{2,}?)\\s*\\1$/);",

@@ -249,6 +249,65 @@ describe("送出與回應", () => {
     h.cleanup();
   });
 
+  it("IME 組字守門：組字中的 Enter 不送出；Shift+Enter 不送出（換行）", () => {
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addEditor();
+        page.addSendBtn();
+        page.addUserMsg("既有訊息");
+      },
+    });
+    h.clock.tick(400);
+    const pen = h.pen();
+    pen.value = "組字中的字";
+    pen.dispatchEvent(new h.win.KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true, cancelable: true }));
+    assert.ok(!feedIncludes(h, "組字中的字"), "組字中（isComposing）的 Enter 不得送出");
+    assert.equal(pen.value, "組字中的字", "組字中輸入框內容不得被清");
+    pen.dispatchEvent(new h.win.KeyboardEvent("keydown", { key: "Enter", keyCode: 229, bubbles: true, cancelable: true }));
+    assert.ok(!feedIncludes(h, "組字中的字"), "keyCode 229 的 Enter 不得送出");
+    pen.dispatchEvent(new h.win.KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true }));
+    assert.ok(!feedIncludes(h, "組字中的字"), "Shift+Enter 是換行，不得送出");
+    h.cleanup();
+  });
+
+  it("死送保護：回應與串流都沒出現 → 120 拍收尾提示、busy 釋放", () => {
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addEditor();
+        page.addSendBtn();
+        page.addUserMsg("既有訊息");
+      },
+    });
+    h.clock.tick(400);
+    h.type("石沉大海的訊息"); // 之後不加任何回應節點、也無 stop 鈕
+    h.clock.tick(300 * 125);
+    h.clock.tick(2500); // no_echo 墨水動畫 + after()
+    assert.ok(feedIncludes(h, zh.no_echo), "死送應在 ~120 拍收尾提示無回音");
+    assert.equal(h.pen().placeholder, zh.pen_placeholder, "busy 應釋放，不得永遠卡住");
+    h.cleanup();
+  });
+
+  it("載入串流中的對話：串流結束後整段重渲染成最終內容", () => {
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addUserMsg("提問");
+        page.addStopBtn(); // 載入當下平台仍在生成
+      },
+    });
+    const { inner } = (() => {
+      const r = h.page.addResponse("部分");
+      return r;
+    })();
+    h.clock.tick(400); // renderExisting 鋪上部分內容 → trackIfStreaming 開始追
+    assert.ok(feedIncludes(h, "部分"));
+    inner.textContent = "部分之後補完的完整內容";
+    h.clock.tick(800); // 追蹤輪詢觀察到文字還在長
+    h.page.removeStopBtn(); // 串流結束
+    h.clock.tick(400 * 6); // stable >= 3 → 重渲染
+    assert.ok(feedIncludes(h, "部分之後補完的完整內容"), "串流結束後應重渲染為最終內容");
+    h.cleanup();
+  });
+
   it("正常回合：回應渲染完成後 busy 釋放、焦點回到日記輸入框", () => {
     const h = createHarness({
       beforeLoad: (win, page) => {
@@ -536,6 +595,24 @@ describe("窺視鈕防護", () => {
     assert.equal(ov.style.pointerEvents, "none");
     h.win.dispatchEvent(new h.win.Event("blur")); // alt-tab / 視窗外放開
     assert.equal(ov.style.opacity, "", "視窗失焦應自動還原，不得永久隱藏");
+    h.cleanup();
+  });
+});
+
+describe("popup 語言切換", () => {
+  it("language 變更：UI 字串即時切換語言", () => {
+    const en = messages.en;
+    const h = createHarness({
+      beforeLoad: (win, page) => page.addUserMsg("內容"),
+    });
+    h.clock.tick(400);
+    assert.equal(h.pen().placeholder, zh.pen_placeholder, "初始應為 zh_TW");
+    h.chrome.fire({ language: { newValue: "en" } });
+    assert.equal(h.pen().placeholder, en.pen_placeholder, "placeholder 應切換為英文");
+    const caption = Array.from(h.overlay().querySelectorAll("[data-i18n]"))
+      .find((el) => el.getAttribute("data-i18n") === "caption");
+    assert.ok(caption, "caption 元素應存在");
+    assert.equal(caption.textContent, en.caption, "data-i18n 元素應重套英文字串");
     h.cleanup();
   });
 });
