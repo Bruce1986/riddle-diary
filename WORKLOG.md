@@ -82,7 +82,7 @@ main 的純記憶體走訪（避免 innerText 強制 layout）只在 claude.ai�
 
 #### 測試補課（2026-07-12，Bruce 指示）：SPA/DOM 行為單元測試＋突變驗證
 - 新增 `tests/helpers/content-harness.js`：jsdom（devDependency）＋ vm 依 manifest 順序載入全部 content script、假時鐘（tick 決定性推進，不 sleep）、chrome.* 同步 stub、claude.ai DOM 夾具——每測試全新隔離環境。
-- 新增 `tests/content-spa.test.js` 的行為測試（條數以 `npm test` 輸出為準）：啟動/監看、SPA 換頁（含首訊轉址 busy 保護、hide-on-leave、自動重現、翻回按鈕跟路由、stale 按鈕防護、翻回/重新啟用後監看重啟）、闔上→翻回 staleness 生命週期、慢載容忍與載入逾時、fail-fast/吞字保護/!streaming 逾時×2/焦點搶回、outermost 去巢狀、多段落換行、佇列 flush、persona 前置、開書防連點、重載殘留清理×2、窺視鈕防護、歷史清單（去重砍半/哈哈哈哈不誤切/截斷/軟導航重查錨點/fallback 守門）、IME 組字與 Shift+Enter 守門、死送 120 拍逾時、trackIfStreaming 載入中串流補渲染、popup 開關與語言切換。
+- 新增 `tests/content-spa.test.js` 的行為測試（條數以 `npm test` 輸出為準）：啟動/監看、SPA 換頁（含首訊轉址 busy 保護、hide-on-leave、自動重現、翻回按鈕跟路由、stale 按鈕防護、翻回/重新啟用後監看重啟）、闔上→翻回 staleness 生命週期、慢載容忍與載入逾時、fail-fast/吞字保護/!streaming 逾時×2/焦點搶回、outermost 去巢狀、多段落換行、ink 動畫後 span 合併、佇列 flush、persona 前置、開書防連點、重載殘留清理×2、窺視鈕防護、歷史清單（去重砍半/哈哈哈哈不誤切/截斷/軟導航重查錨點/fallback 守門）、IME 組字與 Shift+Enter 守門、死送 120 拍逾時、trackIfStreaming 載入中串流補渲染、popup 開關與語言切換。
 - 新增 `scripts/mutation-check.js`（`npm run test:mutation`）：目標式突變逐一把 fix-loop 補回的保護改壞、確認測試轉紅，**全數 killed**（條數以腳本輸出為準——先前兩度在本檔手寫數字造成 off-by-one，改為不重複數字）。過程發現兩處 lastRenderedNodes 顯式 clear 與 resetState 條件 clear 互為雙保險（單行突變倖存＝冗餘防禦、非漏洞），改以複合突變驗整組機制，並補列 watcher 離開對話頁 clear（獨立承重）之突變。
 - 初版測試曾有三個送出類測試靠「boot introPoll 尚未收攤」的非預期路徑通過——已改為先完成初始渲染再進使用者回合（突變驗證就是為了抓這種假綠）。
 - GEMINI.md「DOM 橋接無法被單元測試覆蓋」聲明同步更新。**jsdom ≠ 真站**：merge 前三站 live 手測仍必要（清單見上方收斂註記）。
