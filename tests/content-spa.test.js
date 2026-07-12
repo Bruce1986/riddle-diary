@@ -7,7 +7,7 @@
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const { createHarness, messages } = require("./helpers/content-harness.js");
+const { createHarness, messages, claudePlatform } = require("./helpers/content-harness.js");
 
 const zh = messages.zh_TW;
 
@@ -286,6 +286,52 @@ describe("送出與回應", () => {
     h.cleanup();
   });
 
+  it("busy 中的第二則訊息進佇列，回合結束自動依序送出", () => {
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addEditor();
+        page.addSendBtn();
+        page.addUserMsg("既有訊息");
+      },
+    });
+    h.clock.tick(400);
+    h.type("第一問");
+    h.type("排隊訊息"); // busy 中 → 進佇列，不立即上畫面
+    assert.ok(!feedIncludes(h, "排隊訊息"), "busy 中的訊息應排隊、不得立即送出");
+    h.page.addResponse("第一答");
+    h.clock.tick(300 * 12); // 第一回合 finish
+    h.clock.tick(3000); // 動畫 + after() → 佇列自動送出
+    assert.ok(feedIncludes(h, "第一答"));
+    assert.ok(feedIncludes(h, "排隊訊息"), "回合結束後佇列訊息應自動送出（免再按 Enter）");
+    h.page.addResponse("第二答");
+    h.clock.tick(300 * 12 + 2500); // 第二回合 finish
+    assert.ok(feedIncludes(h, "第二答"), "佇列回合應正常完成");
+    h.cleanup();
+  });
+
+  it("persona 只在本次載入的第一則訊息前置一次", () => {
+    const personaZh = claudePlatform.personaLocales.zh_TW;
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addEditor();
+        page.addSendBtn();
+        page.addUserMsg("既有訊息");
+      },
+    });
+    h.clock.tick(400);
+    h.type("訊息一");
+    const inserts = h.insertedTexts();
+    assert.equal(inserts.length, 1);
+    assert.ok(inserts[0].startsWith(personaZh), "第一則應前置 persona（依 locale 選 zh_TW）");
+    assert.ok(inserts[0].endsWith("訊息一"), "persona 後應接使用者文字");
+    h.page.addResponse("回一");
+    h.clock.tick(300 * 12);
+    h.clock.tick(2000);
+    h.type("訊息二");
+    assert.equal(h.insertedTexts()[1], "訊息二", "第二則不得再前置 persona");
+    h.cleanup();
+  });
+
   it("ink 長文動畫結束後合併回純文字（不殘留上百個 span）", () => {
     const long = "很長的回覆".repeat(60); // 300 字
     const h = createHarness({
@@ -308,6 +354,22 @@ describe("送出與回應", () => {
 });
 
 describe("渲染保護", () => {
+  it("多段落回應：段落邊界保留換行，不得黏成一行（cleanText 依賴 innerText 語意）", () => {
+    const h = createHarness({
+      beforeLoad: (win, page) => page.addResponseParas(["第一段內容", "第二段內容"]),
+    });
+    h.clock.tick(400);
+    const line = Array.from(h.feed().querySelectorAll(".rd-line")).find((l) =>
+      l.textContent.includes("第一段內容")
+    );
+    assert.ok(line, "多段落回應應渲染");
+    assert.ok(
+      line.textContent.includes("第一段內容\n第二段內容"),
+      "段落之間必須保留換行（textContent=" + JSON.stringify(line.textContent) + "）"
+    );
+    h.cleanup();
+  });
+
   it("outermost 去巢狀：容器與子元素同時命中選擇器時只渲染一次", () => {
     const h = createHarness({
       beforeLoad: (win, page) => {

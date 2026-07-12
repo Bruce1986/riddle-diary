@@ -55,7 +55,11 @@ function installClock(win) {
     // 推進 ms 毫秒，依時間（同時間依排程先後）觸發所有到期任務
     tick(ms) {
       const end = now + ms;
+      let iterations = 0;
       for (;;) {
+        if (++iterations > 100000) {
+          throw new Error("fake clock: 單次 tick 內觸發逾 10 萬個任務——疑似 0ms 遞迴計時器（真計時器會讓出事件圈，假時鐘會無限迴圈），請檢查被測程式或測試腳本");
+        }
         let next = null;
         for (const [id, t] of tasks) {
           if (t.time > end) continue;
@@ -92,7 +96,16 @@ function installChrome(win, initialStorage) {
     storage: {
       sync: {
         get(defaults, cb) { cb({ ...defaults, ...data }); },
-        set(obj) { Object.assign(data, obj); },
+        set(obj) {
+          const changes = {};
+          for (const [k, v] of Object.entries(obj)) {
+            changes[k] = { oldValue: data[k], newValue: v };
+            data[k] = v;
+          }
+          // 真 Chrome 對寫入端自身也會非同步觸發 onChanged（self-echo）——
+          // 排進假時鐘 0ms 任務，下一次 tick() 即決定性送達，讓測試自然演練回音路徑的冪等性。
+          win.setTimeout(() => { for (const fn of changeListeners) fn(changes, "sync"); }, 0);
+        },
       },
       onChanged: {
         addListener(fn) { changeListeners.push(fn); },
@@ -151,6 +164,18 @@ function makePage(win) {
       host.appendChild(d);
       return d;
     },
+    // 多段落回應（<p> 子元素）——驗 cleanText 的 innerText 段落換行語意
+    addResponseParas(paragraphs) {
+      const d = doc.createElement("div");
+      d.className = "font-claude-message";
+      for (const p of paragraphs) {
+        const el = doc.createElement("p");
+        el.textContent = p;
+        d.appendChild(el);
+      }
+      host.appendChild(d);
+      return d;
+    },
     addResponse(text, { nestedInStreamingContainer = false } = {}) {
       const inner = doc.createElement("div");
       inner.className = "font-claude-message";
@@ -198,9 +223,31 @@ function createHarness(options = {}) {
 
   // jsdom 缺件補齊（只補測試需要的最小近似）
   if (!("innerText" in win.HTMLElement.prototype)) {
+    // jsdom 未實作 innerText。近似真瀏覽器語意：區塊元素邊界產生換行（多段落/清單
+    // 不得黏成一行——content.js 的 cleanText 依賴此行為）。無 layout，僅按標籤近似。
+    const BLOCK_TAGS = new Set([
+      "P", "DIV", "LI", "UL", "OL", "PRE", "BLOCKQUOTE", "TABLE", "TR",
+      "H1", "H2", "H3", "H4", "H5", "H6", "SECTION", "ARTICLE", "HR",
+    ]);
     Object.defineProperty(win.HTMLElement.prototype, "innerText", {
       configurable: true,
-      get() { return this.textContent; },
+      get() {
+        const parts = [];
+        (function walk(node) {
+          for (const child of node.childNodes) {
+            if (child.nodeType === 3) {
+              parts.push(child.data);
+            } else if (child.nodeType === 1) {
+              if (child.tagName === "BR") { parts.push("\n"); continue; }
+              const block = BLOCK_TAGS.has(child.tagName);
+              if (block) parts.push("\n");
+              walk(child);
+              if (block) parts.push("\n");
+            }
+          }
+        })(this);
+        return parts.join("").replace(/\n{2,}/g, "\n");
+      },
       set(v) { this.textContent = v; },
     });
   }
@@ -208,8 +255,12 @@ function createHarness(options = {}) {
   if (typeof win.CSS.escape !== "function") {
     win.CSS.escape = (s) => String(s).replace(/[^a-zA-Z0-9_-]/g, (c) => "\\" + c);
   }
+  const insertedTexts = [];
   if (execCommand === "ok") {
-    win.document.execCommand = () => true;
+    win.document.execCommand = (cmd, _ui, val) => {
+      if (cmd === "insertText") insertedTexts.push(String(val));
+      return true;
+    };
   } else if (execCommand === "fail") {
     win.document.execCommand = () => false;
   } // "absent"：不定義 → content.js 的 try/catch 走 inserted=false
@@ -240,6 +291,8 @@ function createHarness(options = {}) {
     feed: () => win.document.getElementById("rd-feed"),
     pen: () => win.document.getElementById("rd-pen"),
     reopenBtn: () => win.document.getElementById("rd-reopen"),
+    // 依序記錄 execCommand("insertText") 實際寫入底層編輯器的文字（驗 persona 前置等）
+    insertedTexts: () => [...insertedTexts],
     // feed 內各行的純文字（span 動畫中也取整行 textContent）
     feedTexts() {
       const f = h.feed();
@@ -265,7 +318,8 @@ function createHarness(options = {}) {
   return h;
 }
 
-// i18n 字典（斷言訊息文字用，避免測試硬編中文字串漂移）
+// i18n 字典與 claude 平台設定（斷言用，避免測試硬編字串漂移）
 const messages = require(path.join(ROOT, "i18n/messages.js"));
+const claudePlatform = require(path.join(ROOT, "platforms/claude.js"));
 
-module.exports = { createHarness, messages };
+module.exports = { createHarness, messages, claudePlatform };

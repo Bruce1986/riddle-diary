@@ -6,7 +6,9 @@
 // 預期至少一個測試轉紅（該突變被「殺掉」）→ git checkout 還原 → 下一條。
 // 任何突變若測試仍全綠＝倖存（surviving mutant）＝該保護沒有測試把關，腳本以非零碼結束。
 //
-// 用法：npm run test:mutation（需 git 工作樹的 content.js 乾淨；腳本會自行還原）
+// 用法：npm run test:mutation（需 git 工作樹的 content.js 乾淨）
+// 還原保證：每隻突變跑完即 git checkout 還原；例外／SIGINT／SIGTERM 也會在收尾 handler 還原。
+// 前置：先跑一次未突變的基準測試，紅燈直接中止——否則套件本來就紅時每隻突變都「假 killed」。
 "use strict";
 
 const fs = require("node:fs");
@@ -147,6 +149,11 @@ const MUTATIONS = [
     replace: "",
   },
   {
+    name: "cleanText 改用 textContent（多段落黏成一行）",
+    find: "(clone.innerText || \"\")",
+    replace: "(clone.textContent || \"\")",
+  },
+  {
     name: "ink 動畫後不合併 span（DOM 節點累積）",
     find: "        setTimeout(() => { if (line.isConnected) line.textContent = text; }, 500);",
     replace: "",
@@ -164,6 +171,30 @@ if (sh("git status --porcelain -- content.js") !== "") {
 }
 
 const original = fs.readFileSync(TARGET, "utf8");
+
+// 收尾還原保證：例外、SIGINT、SIGTERM 都把 content.js 還原，絕不留突變在工作樹
+let mutationOnDisk = false;
+function restore() {
+  if (mutationOnDisk) {
+    fs.writeFileSync(TARGET, original);
+    mutationOnDisk = false;
+  }
+}
+process.on("exit", restore);
+for (const sig of ["SIGINT", "SIGTERM"]) {
+  process.on(sig, () => { restore(); process.exit(130); });
+}
+
+// 綠色基準：套件本來就紅的話，每隻突變都會「假 killed」→ 先驗未突變版必須全綠
+{
+  const base = spawnSync(process.execPath, TEST_CMD, { cwd: ROOT, encoding: "utf8" });
+  if (base.status !== 0) {
+    console.error("✖ 基準測試（未突變）已經是紅的——先修測試再跑 mutation check，否則結果無意義");
+    process.exit(2);
+  }
+  console.log("✅ 基準測試全綠，開始突變");
+}
+
 const survivors = [];
 const results = [];
 
@@ -178,9 +209,14 @@ for (const [i, m] of MUTATIONS.entries()) {
     }
     mutated = mutated.replace(e.find, e.replace);
   }
-  fs.writeFileSync(TARGET, mutated);
-  const run = spawnSync(process.execPath, TEST_CMD, { cwd: ROOT, encoding: "utf8" });
-  execSync("git checkout -- content.js", { cwd: ROOT });
+  let run;
+  try {
+    mutationOnDisk = true;
+    fs.writeFileSync(TARGET, mutated);
+    run = spawnSync(process.execPath, TEST_CMD, { cwd: ROOT, encoding: "utf8" });
+  } finally {
+    restore(); // 原內容直接寫回（不依賴 git 狀態），例外也保證還原
+  }
   const killed = run.status !== 0;
   results.push({ name: m.name, killed });
   console.log(`${killed ? "🗡  killed " : "🧟 SURVIVED"}  [${i + 1}/${MUTATIONS.length}] ${m.name}`);
