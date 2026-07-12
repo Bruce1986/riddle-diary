@@ -162,6 +162,19 @@ const MUTATIONS = [
     replace: "",
   },
   {
+    name: "歷史標題去重 regex 退化 \\s+ → \\s*（「哈哈哈哈」誤切）",
+    find: "      const dup = title.match(/^(.{2,}?)\\s+\\1$/);",
+    replace: "      const dup = title.match(/^(.{2,}?)\\s*\\1$/);",
+  },
+  // 註：safeSameOriginPath 的「壞開」方向（不驗直接放行）在夾具可及範圍內不可觀測——
+  // historyItem selector 限定 href^="/chat/"，餵不進 javascript:/跨源 href；該方向由 live 手測把關。
+  // 此處驗「壞閉」方向（守門壞掉全擋）：孤兒對話將永遠無法 hard-reload。
+  {
+    name: "safeSameOriginPath 壞閉（歷史 fallback 全被擋）",
+    find: "      if (u.origin === location.origin && u.protocol === \"https:\") {",
+    replace: "      if (false) {",
+  },
+  {
     name: "cleanText 改用 textContent（多段落黏成一行）",
     find: "(clone.innerText || \"\")",
     replace: "(clone.textContent || \"\")",

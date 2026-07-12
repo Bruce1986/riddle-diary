@@ -13,7 +13,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-const { JSDOM } = require("jsdom");
+const { JSDOM, VirtualConsole } = require("jsdom");
 
 const ROOT = path.resolve(__dirname, "../..");
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
@@ -164,6 +164,20 @@ function makePage(win) {
       host.appendChild(d);
       return d;
     },
+    // 側邊欄歷史對話連結（selectors.historyItem 的 nav a[href^="/chat/"]）
+    addHistoryLink(href, text) {
+      let nav = doc.getElementById("hist-nav");
+      if (!nav) {
+        nav = doc.createElement("nav");
+        nav.id = "hist-nav";
+        host.appendChild(nav);
+      }
+      const a = doc.createElement("a");
+      a.setAttribute("href", href);
+      a.textContent = text;
+      nav.appendChild(a);
+      return a;
+    },
     // 多段落回應（<p> 子元素）——驗 cleanText 的 innerText 段落換行語意
     addResponseParas(paragraphs) {
       const d = doc.createElement("div");
@@ -213,10 +227,14 @@ function createHarness(options = {}) {
     beforeLoad = null,
   } = options;
 
+  // 靜音 jsdom 的「Not implemented: navigation」（location.href 賦值屬預期的 hard-reload 路徑）
+  const virtualConsole = new VirtualConsole();
+  virtualConsole.forwardTo(console, { jsdomErrors: "none" }); // jsdom 29 API：吞掉 navigation not-implemented 類噪音
   const dom = new JSDOM("<!doctype html><html><body></body></html>", {
     url,
     runScripts: "outside-only",
     pretendToBeVisual: false,
+    virtualConsole,
   });
   const win = dom.window;
   const ctx = dom.getInternalVMContext();

@@ -161,6 +161,7 @@ describe("闔上／翻回 與 staleness 生命週期", () => {
     });
     h.clock.tick(400);
     h.click(h.doc.getElementById("rd-close"));
+    h.clock.tick(50); // 先讓 close 的 self-echo 落地——它會無條件 re-hide，殘留到斷言時會造成假綠
     h.click(h.reopenBtn()); // 翻回：resetState 清了 urlWatchId，兩條重啟路徑（click 直接／echo）都要驗
     assert.ok(!h.isHidden());
     h.nav("/settings");
@@ -419,6 +420,62 @@ describe("渲染保護", () => {
     h.clock.tick(900 + 3000);
     const intros = h.feedTexts().filter((t) => t.includes(zh.intro_line));
     assert.equal(intros.length, 1, "開場白只能有一條");
+    h.cleanup();
+  });
+});
+
+describe("歷史清單（書籤翻頁）", () => {
+  it("開面板：標題去重砍半、「哈哈哈哈」不誤切、同 href 去重、超長截斷", () => {
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addUserMsg("內容");
+        page.addHistoryLink("/chat/1", "我的對話 我的對話"); // 可見＋無障礙複本（有空白）→ 砍半
+        page.addHistoryLink("/chat/2", "哈哈哈哈"); // 合法重複字樣（無空白）→ 不得誤切
+        page.addHistoryLink("/chat/1", "我的對話 我的對話"); // 重複 href → 去重
+        page.addHistoryLink("/chat/3", "很".repeat(50)); // 超長 → 40 字＋…
+      },
+    });
+    h.clock.tick(400);
+    h.click(h.doc.getElementById("rd-bookmark"));
+    assert.ok(h.overlay().classList.contains("rd-hist-open"), "書籤應滑出歷史面板");
+    const items = Array.from(h.overlay().querySelectorAll(".rd-hist-item")).map((b) => b.textContent);
+    assert.deepEqual(items, ["我的對話", "哈哈哈哈", "很".repeat(40) + "…"]);
+    h.cleanup();
+  });
+
+  it("點擊項目：重新查找最新錨點做 SPA 軟導航並收起面板", () => {
+    let anchorClicks = 0;
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addUserMsg("內容");
+        page.addHistoryLink("/chat/9", "目標對話");
+      },
+    });
+    h.clock.tick(400);
+    h.click(h.doc.getElementById("rd-bookmark"));
+    // 模擬側邊欄重渲染：舊錨點失效、換上同 href 的新錨點
+    h.doc.querySelector('#hist-nav a[href="/chat/9"]').remove();
+    const fresh = h.page.addHistoryLink("/chat/9", "目標對話");
+    fresh.addEventListener("click", (e) => { e.preventDefault(); anchorClicks++; });
+    h.click(h.overlay().querySelector(".rd-hist-item"));
+    assert.equal(anchorClicks, 1, "應點擊「重新查到的最新錨點」做 SPA 軟導航");
+    assert.ok(!h.overlay().classList.contains("rd-hist-open"), "面板應收起");
+    h.cleanup();
+  });
+
+  it("錨點消失的 fallback：經 safeSameOriginPath 驗證後才 hard-reload（skipcover 有設）", () => {
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addUserMsg("內容");
+        page.addHistoryLink("/chat/7", "孤兒對話");
+      },
+    });
+    h.clock.tick(400);
+    h.click(h.doc.getElementById("rd-bookmark"));
+    h.doc.querySelector('#hist-nav a[href="/chat/7"]').remove(); // 錨點消失且無同 href 替代
+    h.click(h.overlay().querySelector(".rd-hist-item"));
+    assert.equal(h.win.sessionStorage.getItem("rd_skipcover"), "1",
+      "fallback 應通過同源驗證並設定 skipcover 後 hard-reload");
     h.cleanup();
   });
 });
