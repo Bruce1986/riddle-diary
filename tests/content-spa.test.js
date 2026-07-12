@@ -155,6 +155,34 @@ describe("闔上／翻回 與 staleness 生命週期", () => {
     h.cleanup();
   });
 
+  it("翻回後 URL 監看必須重啟：翻回→導航到 /settings 應隱藏、不得蓋住頁面", () => {
+    const h = createHarness({
+      beforeLoad: (win, page) => page.addUserMsg("內容"),
+    });
+    h.clock.tick(400);
+    h.click(h.doc.getElementById("rd-close"));
+    h.click(h.reopenBtn()); // 翻回：resetState 清了 urlWatchId，兩條重啟路徑（click 直接／echo）都要驗
+    assert.ok(!h.isHidden());
+    h.nav("/settings");
+    h.clock.tick(1400);
+    assert.ok(h.isHidden(), "翻回後監看必須繼續運作：到 /settings 應隱藏（否則 overlay 蓋死頁面）");
+    h.cleanup();
+  });
+
+  it("popup 重新啟用後 URL 監看必須重啟：啟用→導航到 /settings 應隱藏", () => {
+    const h = createHarness({
+      beforeLoad: (win, page) => page.addUserMsg("內容"),
+    });
+    h.clock.tick(400);
+    h.chrome.fire({ rd_enabled: { newValue: false } });
+    h.chrome.fire({ rd_enabled: { newValue: true } });
+    assert.ok(!h.isHidden());
+    h.nav("/settings");
+    h.clock.tick(1400);
+    assert.ok(h.isHidden(), "重新啟用後監看必須繼續運作：到 /settings 應隱藏");
+    h.cleanup();
+  });
+
   it("staleness 保護：換對話後舊 DOM 未卸載前不鋪、換新後才鋪", () => {
     const h = createHarness({
       beforeLoad: (win, page) => page.addUserMsg("上一段對話"),

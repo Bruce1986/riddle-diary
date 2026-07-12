@@ -75,6 +75,13 @@ const MUTATIONS = [
     ],
   },
   {
+    name: "翻回/重新啟用後不重啟 URL 監看——直接與 echo 路徑整組失效（overlay 蓋死頁面）",
+    edits: [
+      { find: "        startIntro();\n        watchUrlChanges();\n      }\n      updateReopenVisibility();", replace: "        startIntro();\n      }\n      updateReopenVisibility();" },
+      { find: "              watchUrlChanges(); // resetState 清了 urlWatchId，必須重啟才能繼續偵測 SPA 換頁\n", replace: "" },
+    ],
+  },
+  {
     name: "watcher 離開對話頁不清 lastRenderedNodes（同對話 /settings 來回卡 stale）",
     find: "      if (!PLATFORM.isExistingConversationPath(location.pathname)) lastRenderedNodes.clear();",
     replace: "",

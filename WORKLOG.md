@@ -82,8 +82,8 @@ main 的純記憶體走訪（避免 innerText 強制 layout）只在 claude.ai�
 
 #### 測試補課（2026-07-12，Bruce 指示）：SPA/DOM 行為單元測試＋突變驗證
 - 新增 `tests/helpers/content-harness.js`：jsdom（devDependency）＋ vm 依 manifest 順序載入全部 content script、假時鐘（tick 決定性推進，不 sleep）、chrome.* 同步 stub、claude.ai DOM 夾具——每測試全新隔離環境。
-- 新增 `tests/content-spa.test.js` 28 個測試：啟動/監看、SPA 換頁（含首訊轉址 busy 保護、hide-on-leave、自動重現、翻回按鈕跟路由、stale 按鈕防護）、闔上→翻回 staleness 生命週期、慢載容忍與載入逾時、fail-fast/吞字保護/!streaming 逾時×2/焦點搶回、outermost 去巢狀、開書防連點、重載殘留清理×2、窺視鈕防護、popup 開關。總測試數 123 → 151。
-- 新增 `scripts/mutation-check.js`（`npm run test:mutation`）：25 條目標式突變——逐一把 fix-loop 補回的保護改壞、確認測試轉紅。**26/26 killed**。過程發現兩處 lastRenderedNodes 顯式 clear 與 resetState 條件 clear 互為雙保險（單行突變倖存＝冗餘防禦、非漏洞），改以複合突變驗整組機制，並補列 watcher 離開對話頁 clear（獨立承重）之突變。
+- 新增 `tests/content-spa.test.js` 30 個測試：啟動/監看、SPA 換頁（含首訊轉址 busy 保護、hide-on-leave、自動重現、翻回按鈕跟路由、stale 按鈕防護）、闔上→翻回 staleness 生命週期、慢載容忍與載入逾時、fail-fast/吞字保護/!streaming 逾時×2/焦點搶回、outermost 去巢狀、開書防連點、重載殘留清理×2、窺視鈕防護、popup 開關。總測試數 123 → 153。
+- 新增 `scripts/mutation-check.js`（`npm run test:mutation`）：26 條目標式突變（審後補強含 cleanText 一條）——逐一把 fix-loop 補回的保護改壞、確認測試轉紅。**27/27 killed**。過程發現兩處 lastRenderedNodes 顯式 clear 與 resetState 條件 clear 互為雙保險（單行突變倖存＝冗餘防禦、非漏洞），改以複合突變驗整組機制，並補列 watcher 離開對話頁 clear（獨立承重）之突變。
 - 初版測試曾有三個送出類測試靠「boot introPoll 尚未收攤」的非預期路徑通過——已改為先完成初始渲染再進使用者回合（突變驗證就是為了抓這種假綠）。
 - GEMINI.md「DOM 橋接無法被單元測試覆蓋」聲明同步更新。**jsdom ≠ 真站**：merge 前三站 live 手測仍必要（清單見上方收斂註記）。
 - **審後補強（本段完成後又跑了一輪 gemini-grade fix-loop，8 條 finding 全修）**：mutation 腳本補「綠色基準」前置檢查（套件本來就紅時每隻突變都假 killed——Codex 抓到）＋例外/SIGINT/SIGTERM 還原保證（實測 Ctrl-C 會把突變留在工作樹）；harness 的 innerText polyfill 從 textContent 純別名升級為區塊元素換行語意（否則 cleanText 改壞成 textContent、多段落黏成一行也測不出——已加多段落測試＋對應突變）；假時鐘加 10 萬次迭代上限（防 0ms 遞迴計時器讓 CI 無聲卡死）；chrome stub 的 set() 補真 Chrome 的 self-echo 語意（0ms 假時鐘送達，開闔測試自然演練 onChanged 冪等性）；補佇列 flush 與 persona 前置測試（原本零覆蓋、後者因 stub 丟參數而結構性不可測——已改為捕捉插入文字）。
