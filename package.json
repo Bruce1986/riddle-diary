@@ -1,0 +1,18 @@
+{
+  "name": "riddle-diary",
+  "version": "0.4.0",
+  "private": true,
+  "description": "把 AI 聊天介面化為一本神秘的墨水日記",
+  "scripts": {
+    "lint": "eslint .",
+    "fix": "eslint . --fix",
+    "test": "node --test",
+    "test:mutation": "node scripts/mutation-check.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "eslint": "^9.0.0",
+    "globals": "^15.0.0",
+    "jsdom": "^29.1.1"
+  }
+}

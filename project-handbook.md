@@ -1,13 +1,13 @@
-# Riddle Diary（湯姆瑞斗的日記本）開發協作手冊
+# 墨水日記 · Ink Diary 開發協作手冊
 
 ## 專案身份
 
 | 項目 | 說明 |
 |------|------|
-| **專案名稱** | Riddle Diary ｜ 湯姆瑞斗的日記本 |
-| **在生態系統中的角色** | 一個 Chrome 擴充（MV3），把 claude.ai 的聊天介面偽裝成手寫魔法日記：使用者落筆 → 轉交給已登入的 Claude → 回應以墨水浮現 |
+| **專案名稱** | 墨水日記 · Ink Diary |
+| **在生態系統中的角色** | 一個 Chrome 擴充（MV3），把 Claude、ChatGPT、Gemini 三大 AI 對話介面偽裝成手寫魔法日記：使用者落筆 → 轉交給已登入的 AI → 回應以墨水浮現 |
 | **開發優先順序** | 個人作品 / 興趣專案 |
-| **目前階段** | 開發中（v0.3.1，功能可用） |
+| **目前階段** | 開發中（v0.4.0，支援三大平台；ChatGPT/Gemini selectors 待 live 驗證） |
 | **架構說明** | [README.md](README.md) |
 | **隱私說明** | [PRIVACY.md](PRIVACY.md) |
 | **開發日誌 / 路線圖** | [TODO-20260619-1230.md](TODO-20260619-1230.md) |
@@ -27,8 +27,8 @@
 |----------|------|------|-------------|
 | T1 | 本地打包霞鶩文楷 TC 當辰宇落雁體後備，解決罕用字 fallback 變韓文 | ⏳ | 字檔大，可 subset |
 | T2 | 墨水「沉入紙面再回字」電影級動畫 | ⏳ | |
-| T3 | 翻頁 / 羽毛筆音效；書封皮革質感 | ⏳ | |
-| T4 | 擴充到 ChatGPT / Gemini（各一組 SELECTORS + match） | ⏳ | |
+| T3 | 翻頁 / 羽毛筆音效；書封皮革質感（`writeStrategy` / `features` 為 T3 reserved 欄位） | ⏳ | Gemini 的 Quill 寫入路徑尚未實作（`TODO(T4-E)`）；gemini.js 目前保留 `writeStrategy: "quill"` 讓 content.js 的 canary console.warn 能於 live 觸發，待 T4-E 實測後補 Quill-specific 分支或改回 "prosemirror" |
+| T4 | 擴充到 ChatGPT / Gemini（各一組 SELECTORS + match） | ✅ | 平台檔、Manifest、文件、測試皆完成；live selector 驗證（T4-E）仍待 Bruce 以 DevTools 確認 |
 | T5 | Tangerine 授權條款查證 | ⏳ | 見 `licenses/` |
 
 **狀態圖例：** ⏳ 待開始 ｜ 🟡 進行中 ｜ 🔍 審核中 ｜ ✅ 完成 ｜ ⛔ 阻塞
@@ -52,7 +52,7 @@ PR 標題格式：`[{{類型}}] {{說明}} (#{{編號}})`
 PR 說明應包含：
 - 做了什麼
 - 對外介面是否有異動
-- 如何驗證（本專案無自動測試 → 寫明手動驗證步驟：載入擴充、在 claude.ai 實測哪些情境）
+- 如何驗證：`npm test` 應全數通過（platform schema / URL 路徑 / i18n）；另寫明手動驗證步驟：載入擴充、在 claude.ai / chatgpt.com / gemini.google.com 實測哪些情境，或記錄哪站待 live 驗證
 
 ### 3. Review
 
@@ -65,16 +65,17 @@ PR 說明應包含：
 ## 程式碼規範
 
 - 命名有語意，函式名稱以動詞開頭
-- 錯誤要處理，失敗路徑要有妥善處理（本專案多為 DOM 操作，注意 claude.ai 改版／context 失效）
+- 錯誤要處理，失敗路徑要有妥善處理（本專案多為 DOM 操作，注意 claude.ai / chatgpt.com / gemini.google.com 改版／context 失效）
 - 不留死 code、不留 TODO 在 main 分支
 - 維持「零對外請求」：不要引入任何 `fetch`/`XHR`/`WebSocket`/外部資源
-- 頁面 DOM 選擇器集中在 `content.js` 的 `SELECTORS`
+- 頁面 DOM 選擇器集中在各平台設定檔 `platforms/<platform>.js` 的 `selectors` 物件（`content.js` 只吃抽象介面）
 
 ### PR Review 確認清單
 
-- [ ] 功能符合預期（已在 claude.ai 手動驗證）？
+- [ ] 已執行 `npm test` 並全數通過；若有平台邏輯或路徑變動，已補對應測試？
+- [ ] 功能符合預期（已在 claude.ai / chatgpt.com / gemini.google.com 手動驗證，或記錄哪站待 live 驗證）？
 - [ ] 命名清晰？
-- [ ] 有無潛在 Bug（含 claude.ai 改版／IME／context 失效等邊界）？
+- [ ] 有無潛在 Bug（含 claude.ai / chatgpt.com / gemini.google.com 改版／IME／context 失效等邊界）？
 - [ ] 是否維持零對外請求與最小權限？
 - [ ] 文件（README / PRIVACY / TODO）是否同步？
 
