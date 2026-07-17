@@ -1,5 +1,16 @@
 # WORKLOG
 
+## 2026-07-17 — PR#2 合併後 worktree 稽核：補回四項遺落加固
+
+PR #2 合併後清理本機時，發現兩個 fix-loop 舊 worktree 有未提交改動；逐項與 main 比對後，兩項已被後續輪次以不同解法涵蓋（SPA 自轉場改用 `wasNonConvo && busy` 判斷、lint:fix 遮蔽改 package.json 改名 `fix`），四項真的遺落，本分支補回：
+
+1. **重載既有對話剝除隱藏人設前綴**：送出時前置的人設指令被平台原樣存下，重載後會像使用者親寫。適配 personaLocales 架構——比對「本平台所有語系」（對話建立後可能已切換語言），正規化（nbsp、trim）與 cleanText 輸出一致。
+2. **trackIfStreaming 換頁競態守門**：記住 `trackedPath`，400ms 追蹤輪詢在 700ms url 監看察覺換頁前若讀到新對話 live DOM，自我取消不渲染。
+3. **歷史標題 ReDoS 防護**：去重 regex `/^(.{2,}?)\s+\1$/` 對週期性＋多空白切點標題近二次方回溯（30 萬字實測破秒）；去重前先 200 字上限（標題本就截 40 字，不影響顯示）。
+4. **CI 供應鏈防禦**：`permissions: contents: read` 最小權限＋actions 以 commit SHA 釘選（SHA 經 gh api 對官方 v4 tag 重新驗證）。
+
+測試 164 全過（+4：雙語系剝除、競態時間軸、ReDoS 計時 150ms 門檻）；突變驗證 37/37 killed（+3 條登錄）。
+
 ## 2026-06-20 — T0：解耦平台設定 + 立起 CI
 
 ### 做了什麼
