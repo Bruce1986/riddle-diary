@@ -647,3 +647,97 @@ describe("popup 開關（storage.onChanged）", () => {
     h.cleanup();
   });
 });
+
+describe("重載既有對話：剝除隱藏人設前綴", () => {
+  it("首則使用者訊息帶當下語系人設：剝除後只顯示使用者親寫內容", () => {
+    const persona = claudePlatform.personaLocales.zh_TW;
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addUserMsg(persona + "我的第一問");
+        page.addResponse("回覆內容");
+        page.addUserMsg("普通第二問");
+      },
+    });
+    h.clock.tick(400);
+    assert.deepEqual(
+      h.feedTexts(),
+      ["我的第一問", "回覆內容", "普通第二問"],
+      "人設前綴應剝除；未帶前綴的訊息不得誤剝"
+    );
+    h.cleanup();
+  });
+
+  it("跨語系：對話以英文人設建立、UI 已切回中文，仍應剝除", () => {
+    const personaEn = claudePlatform.personaLocales.en;
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addUserMsg(personaEn + "Dear diary, first entry");
+        page.addResponse("Reply");
+      },
+    });
+    h.clock.tick(400);
+    assert.deepEqual(
+      h.feedTexts(),
+      ["Dear diary, first entry", "Reply"],
+      "非當下語系的人設前綴也應剝除（使用者可能已切換語言）"
+    );
+    h.cleanup();
+  });
+});
+
+describe("trackIfStreaming 換頁競態守門", () => {
+  it("追蹤中換對話：400ms 追蹤輪詢應自我取消，不得把新對話 DOM 誤渲染成本回合結果", () => {
+    // 時間軸設計：url 監看於 t=0 註冊（700ms 一拍：700/1400/2100）、追蹤輪詢於
+    // t=400 起跑（400ms 一拍：800/1200/1600/2000）。在 t=1400（url 監看剛檢查完、
+    // URL 未變）之後換頁＋換 DOM，則 t=1600/2000 兩拍追蹤輪詢都落在 url 監看
+    // 察覺換頁（t=2100）之前——無守門時 t=2000 stable>=3 會把新對話渲染進 feed。
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addUserMsg("舊提問");
+        page.addStopBtn(); // 載入當下平台仍在生成
+      },
+    });
+    h.page.addResponse("部分");
+    h.clock.tick(400); // t=400：renderExisting ＋ trackIfStreaming 起跑
+    assert.deepEqual(h.feedTexts(), ["舊提問", "部分"]);
+    h.clock.tick(400); // t=800：追蹤一拍（串流中，記下 last）
+    h.page.removeStopBtn(); // 串流結束
+    h.clock.tick(400); // t=1200：stable=1
+    h.clock.tick(200); // t=1400：url 監看檢查（URL 未變，無動作）
+    h.nav("/chat/other"); // 使用者從歷史面板切到別的對話
+    h.page.clearMessages();
+    h.page.addUserMsg("新對話的提問");
+    h.page.addResponse("部分"); // 回應文字恰與舊對話相同 → 無守門時 stable 會持續累積
+    h.clock.tick(200); // t=1600：守門應察覺路徑已變 → 自我取消
+    h.clock.tick(400); // t=2000：無守門時此拍 stable>=3 → 誤渲染新對話
+    assert.ok(
+      !feedIncludes(h, "新對話的提問"),
+      "換頁後、url 監看重鋪之前，追蹤輪詢不得搶先把新對話渲染進 feed"
+    );
+    assert.deepEqual(h.feedTexts(), ["舊提問", "部分"], "feed 應維持舊對話內容不變");
+    h.cleanup();
+  });
+});
+
+describe("歷史標題 ReDoS 防護", () => {
+  it("超長週期性標題：先設 200 字上限再去重，不卡主執行緒", () => {
+    // /^(.{2,}?)\s+\1$/ 對「週期性＋大量空白切點」標題呈近二次方回溯：
+    // 30 萬字未設上限實測破秒；設 200 字上限後毫秒級。門檻 150ms 兩側鑑別度充足。
+    const huge = "哈哈 ".repeat(100000).trim();
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addUserMsg("內容");
+        page.addHistoryLink("/chat/big", huge);
+      },
+    });
+    h.clock.tick(400);
+    const t0 = Date.now();
+    h.click(h.doc.getElementById("rd-bookmark"));
+    const elapsed = Date.now() - t0;
+    const items = Array.from(h.overlay().querySelectorAll(".rd-hist-item")).map((b) => b.textContent);
+    assert.equal(items.length, 1, "超長標題項目仍應顯示");
+    assert.ok(items[0].endsWith("…") && items[0].length === 41, "應截為 40 字＋…");
+    assert.ok(elapsed < 150, `去重不得發生災難性回溯（實測 ${elapsed}ms，應遠低於 150ms）`);
+    h.cleanup();
+  });
+});

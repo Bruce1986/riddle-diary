@@ -209,6 +209,21 @@ const MUTATIONS = [
     find: "        setTimeout(() => { if (line.isConnected) line.textContent = text; }, 500);",
     replace: "",
   },
+  {
+    name: "重載對話不剝人設前綴（隱藏指令當成使用者親寫顯示）",
+    find: "      if (isUser) text = stripPersonaPrefix(text);\n",
+    replace: "",
+  },
+  {
+    name: "trackIfStreaming 失去換頁守門（誤把新對話 DOM 當本回合結果渲染）",
+    find: " || location.pathname !== trackedPath",
+    replace: "",
+  },
+  {
+    name: "歷史標題去重失去長度上限（超長標題災難性回溯卡主執行緒）",
+    find: "      if (title.length > 200) title = title.slice(0, 200);\n",
+    replace: "",
+  },
 ];
 
 function sh(cmd) {
