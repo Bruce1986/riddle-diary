@@ -17,12 +17,15 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 以 commit SHA 釘選 action，避免可變 tag 被重指標而在 CI 注入惡意程式（供應鏈防禦）
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      # 以 commit SHA 釘選 action，避免可變 tag 被重指標而在 CI 注入惡意程式（供應鏈防禦）。
+      # 註解一律寫「確切版本」而非浮動的 v4：寫 v4 看不出實際釘在哪一版，
+      # Dependabot / Renovate 也是靠這段註解判斷要不要升版。
+      # SHA 已對官方 repo 的 tag 逐一核對（git ls-remote --tags）。
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
       - name: Use Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
       - name: Install dependencies

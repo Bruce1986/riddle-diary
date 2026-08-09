@@ -720,9 +720,13 @@ describe("trackIfStreaming 換頁競態守門", () => {
 });
 
 describe("歷史標題 ReDoS 防護", () => {
-  it("超長週期性標題：先設 200 字上限再去重，不卡主執行緒", () => {
-    // /^(.{2,}?)\s+\1$/ 對「週期性＋大量空白切點」標題呈近二次方回溯：
-    // 30 萬字未設上限實測破秒；設 200 字上限後毫秒級。門檻 150ms 兩側鑑別度充足。
+  it("超長週期性標題：先設掃描長度上限再去重，不卡主執行緒", () => {
+    // 去重用的 /^(.{2,}?)\s+\1$/ 帶反向參照＋惰性量詞，對「週期性＋大量空白切點」的
+    // 標題呈近二次方回溯：本機實測 15 萬字 ~470ms、30 萬字 ~1.9s；套上 200 字掃描上限
+    // 後降到 ~0.03ms。門檻取 500ms——距未設上限的 ~1.9s 仍有約 4 倍餘裕（抓得到退化），
+    // 又遠高於守門後的實際耗時，不會因 CI 機器負載或 GC 抖動而偽紅。
+    // 計時用 process.hrtime.bigint()（單調時鐘），不受系統時間調整影響；
+    // 假時鐘只攔截 setTimeout/setInterval，不影響這裡量到的真實 CPU 耗時。
     const huge = "哈哈 ".repeat(100000).trim();
     const h = createHarness({
       beforeLoad: (win, page) => {
@@ -731,13 +735,13 @@ describe("歷史標題 ReDoS 防護", () => {
       },
     });
     h.clock.tick(400);
-    const t0 = Date.now();
+    const t0 = process.hrtime.bigint();
     h.click(h.doc.getElementById("rd-bookmark"));
-    const elapsed = Date.now() - t0;
+    const elapsed = Number(process.hrtime.bigint() - t0) / 1e6;
     const items = Array.from(h.overlay().querySelectorAll(".rd-hist-item")).map((b) => b.textContent);
     assert.equal(items.length, 1, "超長標題項目仍應顯示");
     assert.ok(items[0].endsWith("…") && items[0].length === 41, "應截為 40 字＋…");
-    assert.ok(elapsed < 150, `去重不得發生災難性回溯（實測 ${elapsed}ms，應遠低於 150ms）`);
+    assert.ok(elapsed < 500, `去重不得發生災難性回溯（實測 ${elapsed.toFixed(1)}ms，應遠低於 500ms）`);
     h.cleanup();
   });
 });

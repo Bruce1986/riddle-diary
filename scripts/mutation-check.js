@@ -188,8 +188,8 @@ const MUTATIONS = [
   },
   {
     name: "歷史標題去重 regex 退化 \\s+ → \\s*（「哈哈哈哈」誤切）",
-    find: "      const dup = title.match(/^(.{2,}?)\\s+\\1$/);",
-    replace: "      const dup = title.match(/^(.{2,}?)\\s*\\1$/);",
+    find: "  const DUP_TITLE_RE = /^(.{2,}?)\\s+\\1$/;",
+    replace: "  const DUP_TITLE_RE = /^(.{2,}?)\\s*\\1$/;",
   },
   // 註：safeSameOriginPath 的「壞開」方向（不驗直接放行）在夾具可及範圍內不可觀測——
   // historyItem selector 限定 href^="/chat/"，餵不進 javascript:/跨源 href；該方向由 live 手測把關。
@@ -221,7 +221,7 @@ const MUTATIONS = [
   },
   {
     name: "歷史標題去重失去長度上限（超長標題災難性回溯卡主執行緒）",
-    find: "      if (title.length > 200) title = title.slice(0, 200);\n",
+    find: "      if (title.length > HISTORY_TITLE_SCAN_MAX) title = title.slice(0, HISTORY_TITLE_SCAN_MAX);\n",
     replace: "",
   },
 ];

@@ -51,11 +51,18 @@
   // ── 可維護的選擇器 ──────────────────────────────────────────────
   const SELECTORS = PLATFORM.selectors;
 
+  // 取本平台的人設語系表；型別不合（缺欄位／被寫成字串）時回 null。
+  // getPersona() 與 PERSONA_PREFIXES 共用這一份型別防禦，避免兩處各寫一次而走鐘。
+  function personaLocaleMap() {
+    const locales = PLATFORM.personaLocales;
+    return locales && typeof locales === "object" ? locales : null;
+  }
+
   // PERSONA：優先使用 personaLocales（雙語物件），沒有則退回 persona 字串。
   // 實際取用時呼叫 getPersona()，使其依當下語言動態選取。
   function getPersona() {
-    const locales = PLATFORM.personaLocales;
-    if (locales && typeof locales === "object") {
+    const locales = personaLocaleMap();
+    if (locales) {
       const locale = _i18n && typeof _i18n.getLocale === "function"
         ? _i18n.getLocale()
         : "zh_TW";
@@ -72,12 +79,15 @@
   // ProseMirror 重新序列化＋innerText 走訪後無法穩定存活，不能拿原始常數直接比對。
   const PERSONA_PREFIXES = (() => {
     const texts = [];
-    const locales = PLATFORM.personaLocales;
-    if (locales && typeof locales === "object") {
-      Object.keys(locales).forEach((k) => { if (locales[k]) texts.push(locales[k]); });
+    const locales = personaLocaleMap();
+    if (locales) {
+      Object.keys(locales).forEach((k) => { if (typeof locales[k] === "string") texts.push(locales[k]); });
     }
-    if (PLATFORM.persona) texts.push(PLATFORM.persona);
-    return texts.map((p) => p.replace(/ /g, " ").trim()).filter(Boolean);
+    if (typeof PLATFORM.persona === "string") texts.push(PLATFORM.persona);
+    const normalized = texts.map((p) => p.replace(/ /g, " ").trim()).filter(Boolean);
+    // 去重（persona 後備字串多半就等於 personaLocales.zh_TW）＋由長到短排序：
+    // 若日後某語系人設恰為另一語系人設的前綴，先命中短的會留下殘字，故長者優先比對。
+    return Array.from(new Set(normalized)).sort((a, b) => b.length - a.length);
   })();
   function stripPersonaPrefix(text) {
     for (const p of PERSONA_PREFIXES) {
@@ -684,6 +694,16 @@
   }
 
   // ── 歷史篇章（書籤翻頁） ────────────────────────────────────────
+  // 歷史標題長度門檻（勿改成字面量散落各處）：
+  // HISTORY_TITLE_MAX 為實際顯示上限（超過截斷加「…」）；
+  // HISTORY_TITLE_SCAN_MAX 為丟進 DUP_TITLE_RE 前的安全上限，用以擋掉災難性回溯。
+  // 兩者必須維持 SCAN_MAX >= MAX，否則去重會在顯示長度之內就被截掉。
+  const HISTORY_TITLE_MAX = 40;
+  const HISTORY_TITLE_SCAN_MAX = 200;
+  // 「整段重複兩次」（可見文字 + 無障礙複本）的偵測：兩半之間必須有空白（\s+）才算，
+  // 用 \s* 會把「哈哈哈哈」誤切成「哈哈」。
+  const DUP_TITLE_RE = /^(.{2,}?)\s+\1$/;
+
   function toggleHistory(force) {
     const open = force === undefined ? !overlay.classList.contains("rd-hist-open") : force;
     overlay.classList.toggle("rd-hist-open", open);
@@ -712,15 +732,14 @@
         title = (c.innerText || c.textContent || "").replace(/\s+/g, " ").trim();
       }
       if (!title) return;
-      // 先設長度上限再跑去重：/^(.{2,}?)\s+\1$/ 帶反向參照＋惰性量詞，對超長且無合法切點的
-      // 頁面來源標題會發生災難性回溯（近似二次方，實測 10 萬字上百 ms）而卡住主執行緒。
-      // 標題本就會截到 40 字，故此處先設安全上限（200 字）不影響正常顯示。
-      if (title.length > 200) title = title.slice(0, 200);
-      // 後備：剝除後若仍出現「整段重複兩次」（可見 + 無障礙複本）才砍半
-      // 兩半之間必須有空白（\s+）才視為無障礙重複標題；\s* 會把「哈哈哈哈」誤切成「哈哈」
-      const dup = title.match(/^(.{2,}?)\s+\1$/);
+      // 先設長度上限再跑去重：DUP_TITLE_RE 帶反向參照＋惰性量詞，對超長且無合法切點的
+      // 頁面來源標題會發生災難性回溯（近似二次方；實測 15 萬字 ~470ms、30 萬字 ~1.9s）而卡住主執行緒。
+      // 標題本就會截到 HISTORY_TITLE_MAX 字，故此處先設安全上限不影響正常顯示。
+      if (title.length > HISTORY_TITLE_SCAN_MAX) title = title.slice(0, HISTORY_TITLE_SCAN_MAX);
+      // 後備：剝除後若仍出現「整段重複兩次」（可見 + 無障礙複本）才砍半（判定見 DUP_TITLE_RE）
+      const dup = title.match(DUP_TITLE_RE);
       if (dup) title = dup[1].trim();
-      if (title.length > 40) title = title.slice(0, 40) + "…";
+      if (title.length > HISTORY_TITLE_MAX) title = title.slice(0, HISTORY_TITLE_MAX) + "…";
       seen.add(href);
       const item = document.createElement("button");
       item.className = "rd-hist-item";
