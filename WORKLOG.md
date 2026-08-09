@@ -35,6 +35,28 @@ PR #2 合併後清理本機時，發現兩個 fix-loop 舊 worktree 有未提交
 **待辦（不在本 PR scope）**：CI 只跑 lint + test，不跑 `test:mutation`，
 突變登錄的 `find` 字串會隨重構默默失效（本輪就實際發生過一次）。可另開 PR 加 CI job。
 
+### 2026-08-09 — Gemini review 第二輪：挖出 cleanText 的 NBSP 正規化早已失效
+
+Gemini 建議把 `PERSONA_PREFIXES` 那行的字面 NBSP 改成 ` ` 逸出序列。查證時發現
+`cleanText` 的同款寫法 `(clone.innerText || "").replace(/ /g, " ")` **兩側都是一般空白
+U+0020**——在 `main` 上就已經是 space→space 的 no-op，字面 NBSP 想必在某次編輯中被
+悄悄換成一般空白（兩者在編輯器裡長得一模一樣，這正是 Gemini 那條建議的價值所在）。
+
+後果不是理論問題：對話平台常把空白序列化成 `&nbsp;`，此時 `cleanText` 留著 NBSP、
+而 `PERSONA_PREFIXES` 已把 NBSP 正規化成一般空白，`startsWith` 對不上 →
+隱藏人設指令整段外洩到日記，正是本 PR 第 1 項要修的東西。已用逸出序列修回，
+並補一個「NBSP 版人設前綴」測試把兩邊的正規化綁在一起（突變登錄同步 +1 條）。
+
+同輪一併處理：
+
+- `.replace(/^\s+/, "")` → `trimStart()`（Gemini medium；MV3 原生支援）。
+- **標題截斷不切碎代理對**（承接 7/20 尚未處理的那條 review）：新增
+  `sliceKeepingSurrogates()`，掃描上限與顯示上限兩處截斷都改走它。未採用建議的
+  `Array.from(...).slice(...)`——那會先把整串展開成陣列，對超長標題（正是這裡要防的
+  攻擊面）多付一次 O(n)，與長度上限初衷相斥；改為切完檢查尾字是否為 high surrogate，O(1)。
+
+驗證：lint 綠、`npm test` 166/166、`npm run test:mutation` 39/39 killed。
+
 ## 2026-06-20 — T0：解耦平台設定 + 立起 CI
 
 ### 做了什麼
