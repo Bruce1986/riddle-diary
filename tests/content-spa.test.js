@@ -683,6 +683,27 @@ describe("重載既有對話：剝除隱藏人設前綴", () => {
     );
     h.cleanup();
   });
+
+  it("平台把人設中的空白渲染成 NBSP：cleanText 正規化後仍應剝除", () => {
+    // 對話平台常把連續空白（或行首空白）序列化成 &nbsp;。人設候選清單已把 NBSP
+    // 正規化成一般空白，若 cleanText 沒做同樣正規化，startsWith 就對不上，
+    // 隱藏人設指令會整段外洩到日記裡。此測試把兩邊的正規化綁在一起。
+    const persona = claudePlatform.personaLocales.zh_TW;
+    const personaWithNbsp = persona.replace(/ /g, "\u00A0"); // 一般空白 → NBSP（用逸出序列，字面 NBSP 在編輯器裡看不出來）
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addUserMsg(personaWithNbsp + "帶 NBSP 的第一問");
+        page.addResponse("回覆");
+      },
+    });
+    h.clock.tick(400);
+    assert.deepEqual(
+      h.feedTexts(),
+      ["帶 NBSP 的第一問", "回覆"],
+      "NBSP 版本的人設前綴也應剝除（cleanText 與候選清單須做同一套正規化）"
+    );
+    h.cleanup();
+  });
 });
 
 describe("trackIfStreaming 換頁競態守門", () => {
@@ -742,6 +763,31 @@ describe("歷史標題 ReDoS 防護", () => {
     assert.equal(items.length, 1, "超長標題項目仍應顯示");
     assert.ok(items[0].endsWith("…") && items[0].length === 41, "應截為 40 字＋…");
     assert.ok(elapsed < 500, `去重不得發生災難性回溯（實測 ${elapsed.toFixed(1)}ms，應遠低於 500ms）`);
+    h.cleanup();
+  });
+
+  it("emoji 標題：截斷點落在代理對中間時不得切碎（不出現孤兒 surrogate）", () => {
+    // 「💩」是 U+1F4A9，UTF-16 佔 2 個編碼單元。前面刻意墊 1 個 BMP 字元讓後續 emoji
+    // 落在奇數位移上——顯示上限 40 才會切在第 20 個 emoji 的正中間；若不墊這個字元，
+    // 40 恰好是 emoji 邊界，天真的 slice(0, 40) 也不會出錯，測試就變成假綠。
+    // 未修正前 slice(0, 40) 會留下孤兒 high surrogate（瀏覽器渲染成 U+FFFD）。
+    const title = "日" + "💩".repeat(25) + "結尾";
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addUserMsg("內容");
+        page.addHistoryLink("/chat/emoji", title);
+      },
+    });
+    h.clock.tick(400);
+    h.click(h.doc.getElementById("rd-bookmark"));
+    const shown = h.overlay().querySelector(".rd-hist-item").textContent;
+    const lone = [...shown].some((ch) => {
+      const c = ch.charCodeAt(0);
+      return c >= 0xd800 && c <= 0xdfff && ch.length === 1;
+    });
+    assert.ok(!lone, `截斷後不得留下孤兒 surrogate：${JSON.stringify(shown)}`);
+    assert.ok(!shown.includes("�"), "不得出現 U+FFFD 取代字元");
+    assert.ok(shown.endsWith("…"), "超長標題仍應以「…」收尾");
     h.cleanup();
   });
 });

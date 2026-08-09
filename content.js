@@ -84,14 +84,14 @@
       Object.values(locales).forEach((val) => { if (typeof val === "string") texts.push(val); });
     }
     if (typeof PLATFORM.persona === "string") texts.push(PLATFORM.persona);
-    const normalized = texts.map((p) => p.replace(/ /g, " ").trim()).filter(Boolean);
+    const normalized = texts.map((p) => p.replace(/\u00A0/g, " ").trim()).filter(Boolean);
     // 去重（persona 後備字串多半就等於 personaLocales.zh_TW）＋由長到短排序：
     // 若日後某語系人設恰為另一語系人設的前綴，先命中短的會留下殘字，故長者優先比對。
     return Array.from(new Set(normalized)).sort((a, b) => b.length - a.length);
   })();
   function stripPersonaPrefix(text) {
     for (const p of PERSONA_PREFIXES) {
-      if (text.startsWith(p)) return text.slice(p.length).replace(/^\s+/, "");
+      if (text.startsWith(p)) return text.slice(p.length).trimStart();
     }
     return text;
   }
@@ -700,6 +700,18 @@
   // 兩者必須維持 SCAN_MAX >= MAX，否則去重會在顯示長度之內就被截掉。
   const HISTORY_TITLE_MAX = 40;
   const HISTORY_TITLE_SCAN_MAX = 200;
+  // 依「UTF-16 編碼單元」截斷，但不切碎代理對（surrogate pair）：
+  // String.prototype.slice 以編碼單元計算，剛好切在 emoji／罕用漢字（U+10000 以上）中間時
+  // 會留下孤兒 high surrogate，變成無效字元——渲染出 U+FFFD、也會干擾後續 regex 比對。
+  // 尾字若落在 high surrogate（U+D800–U+DBFF）就再退一格，代價 O(1)。
+  // 不用 Array.from(...).slice(...)：那會先把整串展開成陣列，超長標題（本就是這裡要防的
+  // 攻擊面）等於多付一次 O(n) 記憶體，與長度上限的初衷相斥。
+  function sliceKeepingSurrogates(str, max) {
+    if (str.length <= max) return str;
+    const cut = str.slice(0, max);
+    const lastCode = cut.charCodeAt(cut.length - 1);
+    return lastCode >= 0xd800 && lastCode <= 0xdbff ? cut.slice(0, -1) : cut;
+  }
   // 「整段重複兩次」（可見文字 + 無障礙複本）的偵測：兩半之間必須有空白（\s+）才算，
   // 用 \s* 會把「哈哈哈哈」誤切成「哈哈」。
   const DUP_TITLE_RE = /^(.{2,}?)\s+\1$/;
@@ -735,11 +747,11 @@
       // 先設長度上限再跑去重：DUP_TITLE_RE 帶反向參照＋惰性量詞，對超長且無合法切點的
       // 頁面來源標題會發生災難性回溯（近似二次方；實測 15 萬字 ~470ms、30 萬字 ~1.9s）而卡住主執行緒。
       // 標題本就會截到 HISTORY_TITLE_MAX 字，故此處先設安全上限不影響正常顯示。
-      if (title.length > HISTORY_TITLE_SCAN_MAX) title = title.slice(0, HISTORY_TITLE_SCAN_MAX);
+      title = sliceKeepingSurrogates(title, HISTORY_TITLE_SCAN_MAX);
       // 後備：剝除後若仍出現「整段重複兩次」（可見 + 無障礙複本）才砍半（判定見 DUP_TITLE_RE）
       const dup = title.match(DUP_TITLE_RE);
       if (dup) title = dup[1].trim();
-      if (title.length > HISTORY_TITLE_MAX) title = title.slice(0, HISTORY_TITLE_MAX) + "…";
+      if (title.length > HISTORY_TITLE_MAX) title = sliceKeepingSurrogates(title, HISTORY_TITLE_MAX) + "…";
       seen.add(href);
       const item = document.createElement("button");
       item.className = "rd-hist-item";
@@ -859,7 +871,7 @@
       }
     }
     rdTextHolder.replaceChildren(clone);
-    let text = (clone.innerText || "").replace(/ /g, " ").trim();
+    let text = (clone.innerText || "").replace(/\u00A0/g, " ").trim();
     rdTextHolder.replaceChildren();
     text = text.replace(/^(Claude|ChatGPT|Gemini|Assistant|Model)\s+(responded|said)\s*:?\s*|^You\s+said\s*:?\s*/i, "");
     cleanTextCache.set(node, { src: srcNow, out: text });

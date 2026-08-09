@@ -221,8 +221,18 @@ const MUTATIONS = [
   },
   {
     name: "歷史標題去重失去長度上限（超長標題災難性回溯卡主執行緒）",
-    find: "      if (title.length > HISTORY_TITLE_SCAN_MAX) title = title.slice(0, HISTORY_TITLE_SCAN_MAX);\n",
+    find: "      title = sliceKeepingSurrogates(title, HISTORY_TITLE_SCAN_MAX);\n",
     replace: "",
+  },
+  {
+    name: "標題截斷切碎代理對（emoji 標題尾端出現孤兒 surrogate）",
+    find: "    return lastCode >= 0xd800 && lastCode <= 0xdbff ? cut.slice(0, -1) : cut;",
+    replace: "    return cut;",
+  },
+  {
+    name: "cleanText 不再正規化 NBSP（人設前綴比對失效、隱藏指令外洩）",
+    find: "(clone.innerText || \"\").replace(/\\u00A0/g, \" \")",
+    replace: "(clone.innerText || \"\")",
   },
 ];
 
