@@ -81,7 +81,7 @@
     const texts = [];
     const locales = personaLocaleMap();
     if (locales) {
-      Object.keys(locales).forEach((k) => { if (typeof locales[k] === "string") texts.push(locales[k]); });
+      Object.values(locales).forEach((val) => { if (typeof val === "string") texts.push(val); });
     }
     if (typeof PLATFORM.persona === "string") texts.push(PLATFORM.persona);
     const normalized = texts.map((p) => p.replace(/ /g, " ").trim()).filter(Boolean);
