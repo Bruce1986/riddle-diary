@@ -1,5 +1,40 @@
 # WORKLOG
 
+## 2026-08-09 — CI 加上突變驗證 job
+
+PR #4 留下的 follow-up：CI 只跑 lint + test，不跑 `npm run test:mutation`，
+突變登錄的 `find` 字串會隨重構默默失效——PR #4 的 review loop 中就實際發生兩次
+（重構 `content.js` 後 `find` 對不上，`process.exit(2)`，都是本機跑才發現）。
+
+新增 `mutation` job。**刻意獨立成 job、不併進 `build`**：
+
+1. `build` 會先跑 `npm run fix`（`eslint --fix`），那會改動工作樹；而 `mutation-check.js`
+   要求 `content.js` 在 git 工作樹中乾淨（它靠 `git checkout` 還原每隻突變），
+   同 job 執行會直接卡在前置檢查。
+2. 與 `build` 平行跑，不拖長 lint/test 這個快速訊號的回饋時間。
+
+### 附帶修好一個長期空轉的 CI step
+
+CodeRabbit 在本 PR 抓到：workflow 寫 `npm run lint:fix --if-present`，但 PR #2 已把該腳本
+改名為 `fix`，`--if-present` 又把「腳本不存在」靜默吞掉——**那個 auto-fix step 在 main 上
+長期空轉**。這同時打穿了上面理由 1 原本的寫法（工作樹其實沒被弄髒），故一併修正
+（owner 裁決：修回 `npm run fix`，而非刪除該 step）。
+
+已知取捨：修好後可自動修復的 lint 問題不會再讓 CI 轉紅（先 `--fix` 再 `lint`，
+修復不會被 commit，只影響該次 run）。這是恢復該 step 的原始意圖，屬刻意行為。
+
+教訓：`--if-present` 會把腳本改名的斷裂變成靜默 no-op。`lint` / `test` 兩步目前也帶著
+`--if-present`，同類風險仍在（本 PR 未擴張 scope 處理，待後續決定）。
+
+其他決定：
+
+- `timeout-minutes: 15`：本機實測約 85 秒（39 隻突變 × 逐次跑 SPA 測試檔），
+  上限留寬裕但擋得住失控。
+- 不套用 `build` 那組 `hashFiles('package.json')` 條件——那是通用模板的防禦，
+  而本 job 的存在意義就是跑 npm script，沒有 `package.json` 時本來就該紅、
+  不該靜默跳過。
+- action SHA pin 與註解慣例沿用 `build`（寫確切版本，非浮動 `v4`）。
+
 ## 2026-07-17 — PR#2 合併後 worktree 稽核：補回四項遺落加固
 
 PR #2 合併後清理本機時，發現兩個 fix-loop 舊 worktree 有未提交改動；逐項與 main 比對後，兩項已被後續輪次以不同解法涵蓋（SPA 自轉場改用 `wasNonConvo && busy` 判斷、lint:fix 遮蔽改 package.json 改名 `fix`），四項真的遺落，本分支補回：

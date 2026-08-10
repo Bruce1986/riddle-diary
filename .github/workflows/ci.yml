@@ -40,13 +40,49 @@ jobs:
         if: ${{ hashFiles('package.json') == '' }}
         run: echo "No package.json found, skipping install."
       # Automatically attempt to fix lint issues first, then
-      # run the linter again to show any remaining problems
+      # run the linter again to show any remaining problems。
+      # 腳本名是 `fix` 不是 `lint:fix`——PR #2 把 lint:fix 改名為 fix 時這裡沒跟著改，
+      # 而 `--if-present` 又把「腳本不存在」靜默吞掉，導致這一步長期空轉（CodeRabbit 於 PR #6 抓到）。
+      # 已知取捨：這步會實際改動工作樹，可自動修復的 lint 問題因此不會讓 CI 轉紅
+      # （修復不會被 commit，只影響本次 run 的 lint 結果）。這是刻意保留的原意行為。
       - name: Run lint fixes
         if: ${{ hashFiles('package.json') != '' }}
-        run: npm run lint:fix --if-present
+        run: npm run fix --if-present
       - name: Run linter
         if: ${{ hashFiles('package.json') != '' }}
         run: npm run lint --if-present
       - name: Run tests
         if: ${{ hashFiles('package.json') != '' }}
         run: npm test --if-present
+
+  # 突變驗證：逐一把 content.js 的保護改壞，確認 SPA 測試會轉紅。
+  # 沒有這道關卡時，突變登錄的 find 字串會隨重構默默失效——PR #4 的
+  # review loop 中就實際發生兩次（重構後 find 對不上，改完才發現）。
+  #
+  # 刻意獨立成 job，不併進 build：
+  # 1. build 會先跑 `npm run fix`（eslint --fix），那會改動工作樹；而 mutation-check.js
+  #    要求 content.js 在 git 工作樹中乾淨（它靠 `git checkout` 還原每隻突變），
+  #    同 job 執行會直接卡在前置檢查。
+  #    （註：此步在本 PR 修正前因腳本改名 + `--if-present` 而空轉，工作樹其實沒被弄髒；
+  #     修好之後這條理由才真正成立——但即使它再度失效，獨立成 job 仍是較穩健的隔離。）
+  # 2. 與 build 平行跑，不拖長 lint/test 這個快速訊號的回饋時間。
+  #
+  # 本 job 不套用 build 那組 `hashFiles('package.json')` 條件：那是通用模板的
+  # 防禦，而這裡整個 job 的存在意義就是跑 npm script，沒有 package.json 時
+  # 本來就該紅，不該靜默跳過。
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15 # 本機實測約 85 秒（39 隻突變 × SPA 測試檔）；上限留寬裕但擋住失控
+    steps:
+      # SHA pin 與註解慣例同 build job（確切版本，非浮動 v4）
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Use Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run mutation check
+        run: npm run test:mutation
