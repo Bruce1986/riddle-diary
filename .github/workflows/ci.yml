@@ -40,10 +40,14 @@ jobs:
         if: ${{ hashFiles('package.json') == '' }}
         run: echo "No package.json found, skipping install."
       # Automatically attempt to fix lint issues first, then
-      # run the linter again to show any remaining problems
+      # run the linter again to show any remaining problems。
+      # 腳本名是 `fix` 不是 `lint:fix`——PR #2 把 lint:fix 改名為 fix 時這裡沒跟著改，
+      # 而 `--if-present` 又把「腳本不存在」靜默吞掉，導致這一步長期空轉（CodeRabbit 於 PR #6 抓到）。
+      # 已知取捨：這步會實際改動工作樹，可自動修復的 lint 問題因此不會讓 CI 轉紅
+      # （修復不會被 commit，只影響本次 run 的 lint 結果）。這是刻意保留的原意行為。
       - name: Run lint fixes
         if: ${{ hashFiles('package.json') != '' }}
-        run: npm run lint:fix --if-present
+        run: npm run fix --if-present
       - name: Run linter
         if: ${{ hashFiles('package.json') != '' }}
         run: npm run lint --if-present
@@ -56,9 +60,11 @@ jobs:
   # review loop 中就實際發生兩次（重構後 find 對不上，改完才發現）。
   #
   # 刻意獨立成 job，不併進 build：
-  # 1. build 會先跑 `npm run lint:fix`，那會改動工作樹；而 mutation-check.js
+  # 1. build 會先跑 `npm run fix`（eslint --fix），那會改動工作樹；而 mutation-check.js
   #    要求 content.js 在 git 工作樹中乾淨（它靠 `git checkout` 還原每隻突變），
   #    同 job 執行會直接卡在前置檢查。
+  #    （註：此步在本 PR 修正前因腳本改名 + `--if-present` 而空轉，工作樹其實沒被弄髒；
+  #     修好之後這條理由才真正成立——但即使它再度失效，獨立成 job 仍是較穩健的隔離。）
   # 2. 與 build 平行跑，不拖長 lint/test 這個快速訊號的回饋時間。
   #
   # 本 job 不套用 build 那組 `hashFiles('package.json')` 條件：那是通用模板的

@@ -8,10 +8,23 @@ PR #4 留下的 follow-up：CI 只跑 lint + test，不跑 `npm run test:mutatio
 
 新增 `mutation` job。**刻意獨立成 job、不併進 `build`**：
 
-1. `build` 會先跑 `npm run lint:fix`，那會改動工作樹；而 `mutation-check.js` 要求
-   `content.js` 在 git 工作樹中乾淨（它靠 `git checkout` 還原每隻突變），
+1. `build` 會先跑 `npm run fix`（`eslint --fix`），那會改動工作樹；而 `mutation-check.js`
+   要求 `content.js` 在 git 工作樹中乾淨（它靠 `git checkout` 還原每隻突變），
    同 job 執行會直接卡在前置檢查。
 2. 與 `build` 平行跑，不拖長 lint/test 這個快速訊號的回饋時間。
+
+### 附帶修好一個長期空轉的 CI step
+
+CodeRabbit 在本 PR 抓到：workflow 寫 `npm run lint:fix --if-present`，但 PR #2 已把該腳本
+改名為 `fix`，`--if-present` 又把「腳本不存在」靜默吞掉——**那個 auto-fix step 在 main 上
+長期空轉**。這同時打穿了上面理由 1 原本的寫法（工作樹其實沒被弄髒），故一併修正
+（owner 裁決：修回 `npm run fix`，而非刪除該 step）。
+
+已知取捨：修好後可自動修復的 lint 問題不會再讓 CI 轉紅（先 `--fix` 再 `lint`，
+修復不會被 commit，只影響該次 run）。這是恢復該 step 的原始意圖，屬刻意行為。
+
+教訓：`--if-present` 會把腳本改名的斷裂變成靜默 no-op。`lint` / `test` 兩步目前也帶著
+`--if-present`，同類風險仍在（本 PR 未擴張 scope 處理，待後續決定）。
 
 其他決定：
 
