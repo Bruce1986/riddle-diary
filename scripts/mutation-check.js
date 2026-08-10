@@ -188,8 +188,8 @@ const MUTATIONS = [
   },
   {
     name: "歷史標題去重 regex 退化 \\s+ → \\s*（「哈哈哈哈」誤切）",
-    find: "      const dup = title.match(/^(.{2,}?)\\s+\\1$/);",
-    replace: "      const dup = title.match(/^(.{2,}?)\\s*\\1$/);",
+    find: "  const DUP_TITLE_RE = /^(.{2,}?)\\s+\\1$/;",
+    replace: "  const DUP_TITLE_RE = /^(.{2,}?)\\s*\\1$/;",
   },
   // 註：safeSameOriginPath 的「壞開」方向（不驗直接放行）在夾具可及範圍內不可觀測——
   // historyItem selector 限定 href^="/chat/"，餵不進 javascript:/跨源 href；該方向由 live 手測把關。
@@ -208,6 +208,31 @@ const MUTATIONS = [
     name: "ink 動畫後不合併 span（DOM 節點累積）",
     find: "        setTimeout(() => { if (line.isConnected) line.textContent = text; }, 500);",
     replace: "",
+  },
+  {
+    name: "重載對話不剝人設前綴（隱藏指令當成使用者親寫顯示）",
+    find: "      if (isUser) text = stripPersonaPrefix(text);\n",
+    replace: "",
+  },
+  {
+    name: "trackIfStreaming 失去換頁守門（誤把新對話 DOM 當本回合結果渲染）",
+    find: " || location.pathname !== trackedPath",
+    replace: "",
+  },
+  {
+    name: "歷史標題去重失去長度上限（超長標題災難性回溯卡主執行緒）",
+    find: "      title = sliceKeepingSurrogates(title, HISTORY_TITLE_SCAN_MAX);\n",
+    replace: "",
+  },
+  {
+    name: "標題截斷切碎代理對（emoji 標題尾端出現孤兒 surrogate）",
+    find: "    return lastCode >= 0xd800 && lastCode <= 0xdbff ? cut.slice(0, -1) : cut;",
+    replace: "    return cut;",
+  },
+  {
+    name: "cleanText 不再正規化 NBSP（人設前綴比對失效、隱藏指令外洩）",
+    find: "(clone.innerText || \"\").replace(/\\u00A0/g, \" \")",
+    replace: "(clone.innerText || \"\")",
   },
 ];
 

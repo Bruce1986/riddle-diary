@@ -1,5 +1,62 @@
 # WORKLOG
 
+## 2026-07-17 — PR#2 合併後 worktree 稽核：補回四項遺落加固
+
+PR #2 合併後清理本機時，發現兩個 fix-loop 舊 worktree 有未提交改動；逐項與 main 比對後，兩項已被後續輪次以不同解法涵蓋（SPA 自轉場改用 `wasNonConvo && busy` 判斷、lint:fix 遮蔽改 package.json 改名 `fix`），四項真的遺落，本分支補回：
+
+1. **重載既有對話剝除隱藏人設前綴**：送出時前置的人設指令被平台原樣存下，重載後會像使用者親寫。適配 personaLocales 架構——比對「本平台所有語系」（對話建立後可能已切換語言），正規化（nbsp、trim）與 cleanText 輸出一致。
+2. **trackIfStreaming 換頁競態守門**：記住 `trackedPath`，400ms 追蹤輪詢在 700ms url 監看察覺換頁前若讀到新對話 live DOM，自我取消不渲染。
+3. **歷史標題 ReDoS 防護**：去重 regex `/^(.{2,}?)\s+\1$/` 對週期性＋多空白切點標題近二次方回溯（30 萬字實測破秒）；去重前先 200 字上限（標題本就截 40 字，不影響顯示）。
+4. **CI 供應鏈防禦**：`permissions: contents: read` 最小權限＋actions 以 commit SHA 釘選（SHA 經 gh api 對官方 v4 tag 重新驗證）。
+
+測試 164 全過（+4：雙語系剝除、競態時間軸、ReDoS 計時門檻）；突變驗證 37/37 killed（+3 條登錄）。
+
+### 2026-08-09 — 本機 Gemini-grade review 收斂（PR #4）
+
+推 PR 前依 `.gemini/styleguide.md` 逐條自審，四項加固的**行為不變**，收斂如下：
+
+- **門檻常數化**（§2 不要硬編碼）：歷史標題的 `200` / `40` 抽成
+  `HISTORY_TITLE_SCAN_MAX` / `HISTORY_TITLE_MAX`，去重 regex 抽成 `DUP_TITLE_RE`，
+  並在宣告處註明 `SCAN_MAX >= MAX` 的不變式。
+- **型別防禦去重複**（§1 DRY、§5 型別防禦）：`personaLocales` 的物件檢查抽成
+  `personaLocaleMap()`，`getPersona()` 與 `PERSONA_PREFIXES` 共用同一份判斷；
+  候選清單改為只收字串、去重（`persona` 後備字串多半就等於 `personaLocales.zh_TW`）
+  並由長到短排序，避免日後某語系人設恰為另一語系前綴時短者先命中而留下殘字。
+- **SHA pin 註解寫確切版本**（§8 供應鏈）：`# v4` 改為 `# v4.3.1`（checkout）與
+  `# v4.4.0`（setup-node）。兩個 SHA 以 `git ls-remote --tags` 對官方 repo 重新核對
+  屬實；浮動的 `v4` 註解看不出實際釘在哪一版，Dependabot / Renovate 也靠它判斷升版。
+- **計時斷言去 flake**（§9 測試）：ReDoS 測試改用 `process.hrtime.bigint()` 單調時鐘，
+  門檻由 150ms 放寬到 500ms。實測未設上限時 15 萬字 ~470ms、30 萬字 ~1.9s，
+  設上限後 ~0.03ms；500ms 距退化仍有約 4 倍餘裕，又不會因 CI 負載/GC 抖動偽紅。
+- 同步更新 `scripts/mutation-check.js` 兩條受重構影響的 `find` 字串（長度上限、去重 regex）。
+
+驗證：lint 綠、`npm test` 164/164、`npm run test:mutation` 37/37 killed。
+
+**待辦（不在本 PR scope）**：CI 只跑 lint + test，不跑 `test:mutation`，
+突變登錄的 `find` 字串會隨重構默默失效（本輪就實際發生過一次）。可另開 PR 加 CI job。
+
+### 2026-08-09 — Gemini review 第二輪：挖出 cleanText 的 NBSP 正規化早已失效
+
+Gemini 建議把 `PERSONA_PREFIXES` 那行的字面 NBSP 改成 ` ` 逸出序列。查證時發現
+`cleanText` 的同款寫法 `(clone.innerText || "").replace(/ /g, " ")` **兩側都是一般空白
+U+0020**——在 `main` 上就已經是 space→space 的 no-op，字面 NBSP 想必在某次編輯中被
+悄悄換成一般空白（兩者在編輯器裡長得一模一樣，這正是 Gemini 那條建議的價值所在）。
+
+後果不是理論問題：對話平台常把空白序列化成 `&nbsp;`，此時 `cleanText` 留著 NBSP、
+而 `PERSONA_PREFIXES` 已把 NBSP 正規化成一般空白，`startsWith` 對不上 →
+隱藏人設指令整段外洩到日記，正是本 PR 第 1 項要修的東西。已用逸出序列修回，
+並補一個「NBSP 版人設前綴」測試把兩邊的正規化綁在一起（突變登錄同步 +1 條）。
+
+同輪一併處理：
+
+- `.replace(/^\s+/, "")` → `trimStart()`（Gemini medium；MV3 原生支援）。
+- **標題截斷不切碎代理對**（承接 7/20 尚未處理的那條 review）：新增
+  `sliceKeepingSurrogates()`，掃描上限與顯示上限兩處截斷都改走它。未採用建議的
+  `Array.from(...).slice(...)`——那會先把整串展開成陣列，對超長標題（正是這裡要防的
+  攻擊面）多付一次 O(n)，與長度上限初衷相斥；改為切完檢查尾字是否為 high surrogate，O(1)。
+
+驗證：lint 綠、`npm test` 166/166、`npm run test:mutation` 39/39 killed。
+
 ## 2026-06-20 — T0：解耦平台設定 + 立起 CI
 
 ### 做了什麼

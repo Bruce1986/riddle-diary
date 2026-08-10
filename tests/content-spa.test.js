@@ -647,3 +647,147 @@ describe("popup 開關（storage.onChanged）", () => {
     h.cleanup();
   });
 });
+
+describe("重載既有對話：剝除隱藏人設前綴", () => {
+  it("首則使用者訊息帶當下語系人設：剝除後只顯示使用者親寫內容", () => {
+    const persona = claudePlatform.personaLocales.zh_TW;
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addUserMsg(persona + "我的第一問");
+        page.addResponse("回覆內容");
+        page.addUserMsg("普通第二問");
+      },
+    });
+    h.clock.tick(400);
+    assert.deepEqual(
+      h.feedTexts(),
+      ["我的第一問", "回覆內容", "普通第二問"],
+      "人設前綴應剝除；未帶前綴的訊息不得誤剝"
+    );
+    h.cleanup();
+  });
+
+  it("跨語系：對話以英文人設建立、UI 已切回中文，仍應剝除", () => {
+    const personaEn = claudePlatform.personaLocales.en;
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addUserMsg(personaEn + "Dear diary, first entry");
+        page.addResponse("Reply");
+      },
+    });
+    h.clock.tick(400);
+    assert.deepEqual(
+      h.feedTexts(),
+      ["Dear diary, first entry", "Reply"],
+      "非當下語系的人設前綴也應剝除（使用者可能已切換語言）"
+    );
+    h.cleanup();
+  });
+
+  it("平台把人設中的空白渲染成 NBSP：cleanText 正規化後仍應剝除", () => {
+    // 對話平台常把連續空白（或行首空白）序列化成 &nbsp;。人設候選清單已把 NBSP
+    // 正規化成一般空白，若 cleanText 沒做同樣正規化，startsWith 就對不上，
+    // 隱藏人設指令會整段外洩到日記裡。此測試把兩邊的正規化綁在一起。
+    const persona = claudePlatform.personaLocales.zh_TW;
+    const personaWithNbsp = persona.replace(/ /g, "\u00A0"); // 一般空白 → NBSP（用逸出序列，字面 NBSP 在編輯器裡看不出來）
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addUserMsg(personaWithNbsp + "帶 NBSP 的第一問");
+        page.addResponse("回覆");
+      },
+    });
+    h.clock.tick(400);
+    assert.deepEqual(
+      h.feedTexts(),
+      ["帶 NBSP 的第一問", "回覆"],
+      "NBSP 版本的人設前綴也應剝除（cleanText 與候選清單須做同一套正規化）"
+    );
+    h.cleanup();
+  });
+});
+
+describe("trackIfStreaming 換頁競態守門", () => {
+  it("追蹤中換對話：400ms 追蹤輪詢應自我取消，不得把新對話 DOM 誤渲染成本回合結果", () => {
+    // 時間軸設計：url 監看於 t=0 註冊（700ms 一拍：700/1400/2100）、追蹤輪詢於
+    // t=400 起跑（400ms 一拍：800/1200/1600/2000）。在 t=1400（url 監看剛檢查完、
+    // URL 未變）之後換頁＋換 DOM，則 t=1600/2000 兩拍追蹤輪詢都落在 url 監看
+    // 察覺換頁（t=2100）之前——無守門時 t=2000 stable>=3 會把新對話渲染進 feed。
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addUserMsg("舊提問");
+        page.addStopBtn(); // 載入當下平台仍在生成
+      },
+    });
+    h.page.addResponse("部分");
+    h.clock.tick(400); // t=400：renderExisting ＋ trackIfStreaming 起跑
+    assert.deepEqual(h.feedTexts(), ["舊提問", "部分"]);
+    h.clock.tick(400); // t=800：追蹤一拍（串流中，記下 last）
+    h.page.removeStopBtn(); // 串流結束
+    h.clock.tick(400); // t=1200：stable=1
+    h.clock.tick(200); // t=1400：url 監看檢查（URL 未變，無動作）
+    h.nav("/chat/other"); // 使用者從歷史面板切到別的對話
+    h.page.clearMessages();
+    h.page.addUserMsg("新對話的提問");
+    h.page.addResponse("部分"); // 回應文字恰與舊對話相同 → 無守門時 stable 會持續累積
+    h.clock.tick(200); // t=1600：守門應察覺路徑已變 → 自我取消
+    h.clock.tick(400); // t=2000：無守門時此拍 stable>=3 → 誤渲染新對話
+    assert.ok(
+      !feedIncludes(h, "新對話的提問"),
+      "換頁後、url 監看重鋪之前，追蹤輪詢不得搶先把新對話渲染進 feed"
+    );
+    assert.deepEqual(h.feedTexts(), ["舊提問", "部分"], "feed 應維持舊對話內容不變");
+    h.cleanup();
+  });
+});
+
+describe("歷史標題 ReDoS 防護", () => {
+  it("超長週期性標題：先設掃描長度上限再去重，不卡主執行緒", () => {
+    // 去重用的 /^(.{2,}?)\s+\1$/ 帶反向參照＋惰性量詞，對「週期性＋大量空白切點」的
+    // 標題呈近二次方回溯：本機實測 15 萬字 ~470ms、30 萬字 ~1.9s；套上 200 字掃描上限
+    // 後降到 ~0.03ms。門檻取 500ms——距未設上限的 ~1.9s 仍有約 4 倍餘裕（抓得到退化），
+    // 又遠高於守門後的實際耗時，不會因 CI 機器負載或 GC 抖動而偽紅。
+    // 計時用 process.hrtime.bigint()（單調時鐘），不受系統時間調整影響；
+    // 假時鐘只攔截 setTimeout/setInterval，不影響這裡量到的真實 CPU 耗時。
+    const huge = "哈哈 ".repeat(100000).trim();
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addUserMsg("內容");
+        page.addHistoryLink("/chat/big", huge);
+      },
+    });
+    h.clock.tick(400);
+    const t0 = process.hrtime.bigint();
+    h.click(h.doc.getElementById("rd-bookmark"));
+    const elapsed = Number(process.hrtime.bigint() - t0) / 1e6;
+    const items = Array.from(h.overlay().querySelectorAll(".rd-hist-item")).map((b) => b.textContent);
+    assert.equal(items.length, 1, "超長標題項目仍應顯示");
+    assert.ok(items[0].endsWith("…") && items[0].length === 41, "應截為 40 字＋…");
+    assert.ok(elapsed < 500, `去重不得發生災難性回溯（實測 ${elapsed.toFixed(1)}ms，應遠低於 500ms）`);
+    h.cleanup();
+  });
+
+  it("emoji 標題：截斷點落在代理對中間時不得切碎（不出現孤兒 surrogate）", () => {
+    // 「💩」是 U+1F4A9，UTF-16 佔 2 個編碼單元。前面刻意墊 1 個 BMP 字元讓後續 emoji
+    // 落在奇數位移上——顯示上限 40 才會切在第 20 個 emoji 的正中間；若不墊這個字元，
+    // 40 恰好是 emoji 邊界，天真的 slice(0, 40) 也不會出錯，測試就變成假綠。
+    // 未修正前 slice(0, 40) 會留下孤兒 high surrogate（瀏覽器渲染成 U+FFFD）。
+    const title = "日" + "💩".repeat(25) + "結尾";
+    const h = createHarness({
+      beforeLoad: (win, page) => {
+        page.addUserMsg("內容");
+        page.addHistoryLink("/chat/emoji", title);
+      },
+    });
+    h.clock.tick(400);
+    h.click(h.doc.getElementById("rd-bookmark"));
+    const shown = h.overlay().querySelector(".rd-hist-item").textContent;
+    const lone = [...shown].some((ch) => {
+      const c = ch.charCodeAt(0);
+      return c >= 0xd800 && c <= 0xdfff && ch.length === 1;
+    });
+    assert.ok(!lone, `截斷後不得留下孤兒 surrogate：${JSON.stringify(shown)}`);
+    assert.ok(!shown.includes("�"), "不得出現 U+FFFD 取代字元");
+    assert.ok(shown.endsWith("…"), "超長標題仍應以「…」收尾");
+    h.cleanup();
+  });
+});
